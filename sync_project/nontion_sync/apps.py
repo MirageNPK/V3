@@ -11,9 +11,9 @@ class SyncAppConfig(AppConfig):
             # Запускаємо планувальник тільки в основному процесі
             return
 
-        from .jobs import sync_notion_order, sync_service_report_job
+        from .jobs import  sync_service_report_job
         try:
-            sync_notion_order()
+            
             sync_service_report_job()
         except Exception as e:
             import logging
