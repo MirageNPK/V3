@@ -19,6 +19,7 @@ class NotionOrders(models.Model):
     service_name = models.CharField(max_length=300)
     business_unit = models.CharField(max_length=250)
     service_id = models.IntegerField()
+    business_unit_id = models.IntegerField()
     order_cost = models.DecimalField(max_digits=10, decimal_places=2)
     finish_date = models.DateField()
 
