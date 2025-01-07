@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'sync_app',
     'django_apscheduler',
+    'nontion_sync',
 ]
 
 MIDDLEWARE = [
