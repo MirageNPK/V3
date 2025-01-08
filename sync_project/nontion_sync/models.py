@@ -22,6 +22,7 @@ class NotionOrders(models.Model):
     business_unit_id = models.IntegerField()
     order_cost = models.DecimalField(max_digits=10, decimal_places=2)
     finish_date = models.DateField()
+    record_hash = models.CharField(max_length=64, null=True, blank=True)
 
     def __str__(self):
         return f"NotionOrders: {self.name[:20]} - {self.finish_date.strftime('%d/%m/%Y')}"
