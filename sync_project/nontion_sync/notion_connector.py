@@ -32,8 +32,6 @@ class NotionResponsibleReportConnector:
     def __init__(self, notion_token, database_id):
         self.notion = Client(auth=notion_token)
         self.database_id = database_id
-    
-
         
     def sync_service_report(self):
         retries = 3
@@ -62,11 +60,26 @@ class NotionResponsibleReportConnector:
                     )
                 )
 
-                # Синхронізація даних у Notion
+                 # Отримуємо існуючі записи з Notion
+                query_response = self.notion.databases.query(
+                    database_id=self.database_id,
+                )
+                notion_pages = query_response.get("results", [])
+
+                # Створюємо набір всіх service_id, які зараз є в базі Notion
+                notion_service_ids = {page['properties']['Responsible Name']['title'][0]['text']['content'] for page in notion_pages}
+
+                # Створення нових або оновлення записів, також видалення непотрібних
                 for res in responsible_data:
                     notion_data = self._prepare_service_data(res)
                     self._update_or_create_record(res['responsible'], notion_data)
                     records_synced += 1
+                    # Видалення з Notion, якщо запису немає в нових даних
+                    notion_service_ids.discard(str(res['responsible']))
+
+                # Видаляємо з Notion сервіси, яких немає в нових даних
+                for service_id_to_remove in notion_service_ids:
+                    self._delete_record_from_notion(service_id_to_remove)
 
                 logger.info(f"✅ Successfully synced {records_synced} records.")
                 break  # Виходимо з циклу, якщо успішно
@@ -122,6 +135,26 @@ class NotionResponsibleReportConnector:
             self.notion.pages.create(parent={"database_id": self.database_id}, properties=data)
             logger.info(f"Created new record with responsible: {responsible}")
 
+    def _delete_record_from_notion(self, responsible):
+        """Архівує запис з бази Notion"""
+        query_response = self.notion.databases.query(
+            database_id=self.database_id,
+            filter={"property": "Responsible Name", "rich_text": {"equals": str(responsible)}}
+        )
+        
+        pages = query_response.get("results", [])
+        
+        if pages:
+            for page in pages:
+                page_id = page['id']
+                try:
+                    # Архівуємо сторінку 
+                    self.notion.pages.update(page_id=page_id, archived=True)
+                    logger.info(f"Archived record with service_id: {responsible} and page_id: {page_id}")
+                except Exception as e:
+                    logger.error(f"Failed to archive page with service_id: {responsible}. Error: {str(e)}")
+        else:
+            logger.warning(f"No page found for service_id: {responsible}")
 
 # Формування звіту по бізнесюнітам які роблять замовлення
 class NotionBuReportConnector:
@@ -156,11 +189,26 @@ class NotionBuReportConnector:
                     )
                 )
 
-                # Синхронізація даних у Notion
+                # Отримуємо існуючі записи з Notion
+                query_response = self.notion.databases.query(
+                    database_id=self.database_id,
+                )
+                notion_pages = query_response.get("results", [])
+
+                # Створюємо набір всіх service_id, які зараз є в базі Notion
+                notion_service_ids = {page['properties']['BU ID']['rich_text'][0]['text']['content'] for page in notion_pages}
+
+                # Створення нових або оновлення записів, також видалення непотрібних
                 for res in business_unit_data:
                     notion_data = self._prepare_service_data(res)
                     self._update_or_create_record(res['business_unit_id'], notion_data)
                     records_synced += 1
+                    # Видалення з Notion, якщо запису немає в нових даних
+                    notion_service_ids.discard(str(res['business_unit_id']))
+
+                # Видаляємо з Notion сервіси, яких немає в нових даних
+                for service_id_to_remove in notion_service_ids:
+                    self._delete_record_from_notion(service_id_to_remove)
 
                 logger.info(f"✅ Successfully synced {records_synced} records.")
                 break  # Виходимо з циклу, якщо успішно
@@ -215,7 +263,27 @@ class NotionBuReportConnector:
             # Створюємо новий запис
             self.notion.pages.create(parent={"database_id": self.database_id}, properties=data)
             logger.info(f"Created new record with responsible: {business_unit_id}")
-
+    
+    def _delete_record_from_notion(self, business_unit_id):
+        """Архівує запис з бази Notion"""
+        query_response = self.notion.databases.query(
+            database_id=self.database_id,
+            filter={"property": "BU ID", "rich_text": {"equals": str(business_unit_id)}}
+        )
+        
+        pages = query_response.get("results", [])
+        
+        if pages:
+            for page in pages:
+                page_id = page['id']
+                try:
+                    # Архівуємо сторінку 
+                    self.notion.pages.update(page_id=page_id, archived=True)
+                    logger.info(f"Archived record with service_id: {business_unit_id} and page_id: {page_id}")
+                except Exception as e:
+                    logger.error(f"Failed to archive page with service_id: {business_unit_id}. Error: {str(e)}")
+        else:
+            logger.warning(f"No page found for service_id: {business_unit_id}")
 
 # Формування звіту по послугам наданим в ордерах
 class NotionServiceReportConnector:
