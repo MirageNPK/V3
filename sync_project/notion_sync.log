@@ -1,0 +1,92 @@
+2025-01-08 09:57:21,758 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по сервісам
+2025-01-08 09:57:22,858 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/13e3a17e5d7f80da9a55e1a01feda7b3/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:22,862 - notion_sync - INFO - Fetched 5 records from Notion.
+2025-01-08 09:57:22,866 - notion_sync - INFO - ✅ Synced record: Order №  37 
+2025-01-08 09:57:22,867 - notion_sync - INFO - ✅ Synced record: Робота по Дія Сіті 33 4
+2025-01-08 09:57:22,869 - notion_sync - INFO - ✅ Synced record: Формування бюджету
+2025-01-08 09:57:22,870 - notion_sync - INFO - ✅ Synced record: Звіт по CF за місяць
+2025-01-08 09:57:22,872 - notion_sync - INFO - ✅ Synced record: Робота по Дія Сіті
+2025-01-08 09:57:22,872 - notion_sync - INFO - Sync completed. 5/5 records synced.
+2025-01-08 09:57:22,872 - nontion_sync.tasks - INFO - ✅ Sync result for 13e3a17e5d7f80da9a55e1a01feda7b3: Sync completed. 5/5 records synced.
+2025-01-08 09:57:22,874 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по сервісам
+2025-01-08 09:57:24,161 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1733a17e5d7f8009bbf6d7c68b1cacf1/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:24,940 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-813f-a6c3-ea5e5f63e9fe "HTTP/1.1 200 OK"
+2025-01-08 09:57:24,941 - notion_sync - INFO - Updated record with responsible: 116
+2025-01-08 09:57:25,337 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1733a17e5d7f8009bbf6d7c68b1cacf1/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:27,073 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8175-a1ef-e145ddfae7ea "HTTP/1.1 200 OK"
+2025-01-08 09:57:27,080 - notion_sync - INFO - Updated record with responsible: 122
+2025-01-08 09:57:27,769 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1733a17e5d7f8009bbf6d7c68b1cacf1/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:28,420 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-81a5-b00c-e642d8aa8dae "HTTP/1.1 200 OK"
+2025-01-08 09:57:28,421 - notion_sync - INFO - Updated record with responsible: 143
+2025-01-08 09:57:28,422 - notion_sync - INFO - ✅ Successfully synced 3 records.
+2025-01-08 09:57:28,422 - nontion_sync.tasks - INFO - ✅ Sync result for 1733a17e5d7f8009bbf6d7c68b1cacf1: Sync completed. 3 records synced.
+2025-01-08 09:57:28,423 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по людям
+2025-01-08 09:57:29,100 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f80daa1e2c6c5c7cc979c/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:29,705 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-819a-b15a-c2abc5fcfe2d "HTTP/1.1 200 OK"
+2025-01-08 09:57:29,706 - notion_sync - INFO - Updated record with responsible: Insomnia
+2025-01-08 09:57:30,072 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f80daa1e2c6c5c7cc979c/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:30,719 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-81d5-9336-d572a6cf1112 "HTTP/1.1 200 OK"
+2025-01-08 09:57:30,720 - notion_sync - INFO - Updated record with responsible: Mirage
+2025-01-08 09:57:31,127 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f80daa1e2c6c5c7cc979c/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:31,598 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-811c-9129-c6abd0ecc4c7 "HTTP/1.1 200 OK"
+2025-01-08 09:57:31,600 - notion_sync - INFO - Updated record with responsible: Voice
+2025-01-08 09:57:31,601 - notion_sync - INFO - ✅ Successfully synced 3 records.
+2025-01-08 09:57:31,601 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f80daa1e2c6c5c7cc979c: Sync completed. 3 records synced.
+2025-01-08 09:57:31,603 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по бізнесюнітам
+2025-01-08 09:57:32,606 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:35,884 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8184-b200-c7c1a3eeea59 "HTTP/1.1 200 OK"
+2025-01-08 09:57:35,932 - notion_sync - INFO - Updated record with responsible: 1
+2025-01-08 09:57:36,355 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:36,795 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8124-970d-e308d74fe818 "HTTP/1.1 200 OK"
+2025-01-08 09:57:36,797 - notion_sync - INFO - Updated record with responsible: 6
+2025-01-08 09:57:37,302 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-08 09:57:37,943 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8107-9fb4-f6ee50f085f2 "HTTP/1.1 200 OK"
+2025-01-08 09:57:37,945 - notion_sync - INFO - Updated record with responsible: 15
+2025-01-08 09:57:37,946 - notion_sync - INFO - ✅ Successfully synced 3 records.
+2025-01-08 09:57:37,946 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 3 records synced.
+2025-01-08 09:58:10,596 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по сервісам
+2025-01-08 09:58:11,717 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/13e3a17e5d7f80da9a55e1a01feda7b3/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:11,720 - notion_sync - INFO - Fetched 5 records from Notion.
+2025-01-08 09:58:11,724 - notion_sync - INFO - ✅ Synced record: Order №  37 
+2025-01-08 09:58:11,726 - notion_sync - INFO - ✅ Synced record: Робота по Дія Сіті 33 4
+2025-01-08 09:58:11,730 - notion_sync - INFO - ✅ Synced record: Формування бюджету
+2025-01-08 09:58:11,731 - notion_sync - INFO - ✅ Synced record: Звіт по CF за місяць
+2025-01-08 09:58:11,731 - notion_sync - INFO - ✅ Synced record: Робота по Дія Сіті
+2025-01-08 09:58:11,731 - notion_sync - INFO - Sync completed. 5/5 records synced.
+2025-01-08 09:58:11,732 - nontion_sync.tasks - INFO - ✅ Sync result for 13e3a17e5d7f80da9a55e1a01feda7b3: Sync completed. 5/5 records synced.
+2025-01-08 09:58:11,732 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по сервісам
+2025-01-08 09:58:12,304 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1733a17e5d7f8009bbf6d7c68b1cacf1/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:13,012 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-813f-a6c3-ea5e5f63e9fe "HTTP/1.1 200 OK"
+2025-01-08 09:58:13,013 - notion_sync - INFO - Updated record with responsible: 116
+2025-01-08 09:58:13,540 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1733a17e5d7f8009bbf6d7c68b1cacf1/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:15,826 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8175-a1ef-e145ddfae7ea "HTTP/1.1 200 OK"
+2025-01-08 09:58:15,827 - notion_sync - INFO - Updated record with responsible: 122
+2025-01-08 09:58:16,328 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1733a17e5d7f8009bbf6d7c68b1cacf1/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:16,867 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-81a5-b00c-e642d8aa8dae "HTTP/1.1 200 OK"
+2025-01-08 09:58:16,868 - notion_sync - INFO - Updated record with responsible: 143
+2025-01-08 09:58:16,870 - notion_sync - INFO - ✅ Successfully synced 3 records.
+2025-01-08 09:58:16,871 - nontion_sync.tasks - INFO - ✅ Sync result for 1733a17e5d7f8009bbf6d7c68b1cacf1: Sync completed. 3 records synced.
+2025-01-08 09:58:16,872 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по людям
+2025-01-08 09:58:18,902 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f80daa1e2c6c5c7cc979c/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:22,666 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-819a-b15a-c2abc5fcfe2d "HTTP/1.1 200 OK"
+2025-01-08 09:58:22,666 - notion_sync - INFO - Updated record with responsible: Insomnia
+2025-01-08 09:58:24,653 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f80daa1e2c6c5c7cc979c/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:26,110 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-81d5-9336-d572a6cf1112 "HTTP/1.1 200 OK"
+2025-01-08 09:58:26,118 - notion_sync - INFO - Updated record with responsible: Mirage
+2025-01-08 09:58:26,503 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f80daa1e2c6c5c7cc979c/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:27,041 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-811c-9129-c6abd0ecc4c7 "HTTP/1.1 200 OK"
+2025-01-08 09:58:27,042 - notion_sync - INFO - Updated record with responsible: Voice
+2025-01-08 09:58:27,043 - notion_sync - INFO - ✅ Successfully synced 3 records.
+2025-01-08 09:58:27,044 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f80daa1e2c6c5c7cc979c: Sync completed. 3 records synced.
+2025-01-08 09:58:27,046 - nontion_sync.tasks - INFO - Processing NotionDbConfig: Аналітика по бізнесюнітам
+2025-01-08 09:58:28,036 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:28,949 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8184-b200-c7c1a3eeea59 "HTTP/1.1 200 OK"
+2025-01-08 09:58:28,951 - notion_sync - INFO - Updated record with responsible: 1
+2025-01-08 09:58:30,911 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:31,403 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8124-970d-e308d74fe818 "HTTP/1.1 200 OK"
+2025-01-08 09:58:31,404 - notion_sync - INFO - Updated record with responsible: 6
+2025-01-08 09:58:31,934 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-08 09:58:33,275 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/1743a17e-5d7f-8107-9fb4-f6ee50f085f2 "HTTP/1.1 200 OK"
+2025-01-08 09:58:33,279 - notion_sync - INFO - Updated record with responsible: 15
+2025-01-08 09:58:33,280 - notion_sync - INFO - ✅ Successfully synced 3 records.
+2025-01-08 09:58:33,280 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 3 records synced.

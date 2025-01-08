@@ -2,6 +2,7 @@ from django.apps import AppConfig
 from django.conf import settings
 import os
 
+
 class SyncAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'nontion_sync'
@@ -11,10 +12,9 @@ class SyncAppConfig(AppConfig):
             # Запускаємо планувальник тільки в основному процесі
             return
 
-        from .jobs import  sync_service_report_job
+        from .jobs import  sync_notion_order
         try:
-            
-            sync_service_report_job()
+            sync_notion_order()
         except Exception as e:
             import logging
             logging.error(f"Error starting scheduler: {e}")
