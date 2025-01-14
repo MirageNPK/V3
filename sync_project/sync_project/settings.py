@@ -27,10 +27,27 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
+# Celery налаштування
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Europe/Kiev'
+CELERY_BEAT_STORE = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERYBEAT_SCHEDULE_FILENAME = "celerybeat-schedule"
+# CELERY_BEAT_SCHEDULE = {
+#     # Завдання, яке буде виконуватись кожні 2 хвилини
+#     'sync-notion-every-2-minutes': {
+#         'task': 'nontion_sync.tasks.sync_notion_orders',  # Назва вашого завдання
+#         'schedule': 120.0,  # Інтервал (в секундах)
+#         },
+#     }
 # Application definition
-
+# Імпорт задач Celery
+CELERY_IMPORTS = ('nontion_sync.tasks',)  # Імпортуємо задачі з модуля nontion_sync.tasks
 INSTALLED_APPS = [
+    'django_celery_beat',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -78,11 +95,12 @@ WSGI_APPLICATION = 'sync_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 20,  # Збільшіть таймаут для очікування доступу
-        },
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'notion_db',
+        'USER': 'db_admin',
+        'PASSWORD': 'Petro1207$',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
@@ -111,7 +129,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Kiev'
 
 USE_I18N = True
 
