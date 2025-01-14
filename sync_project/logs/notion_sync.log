@@ -32,3 +32,111 @@
 2025-01-14 15:36:28,416 - notion_sync - INFO - Created new record with responsible: 6
 2025-01-14 15:36:28,416 - notion_sync - INFO - ✅ Successfully synced 4 records.
 2025-01-14 15:36:28,416 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 4 records synced.
+2025-01-14 15:46:06,782 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 15:46:08,030 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:46:08,036 - notion_sync - ERROR - Attempt 1 failed: list index out of range. Retrying in 5 seconds...
+2025-01-14 15:46:14,407 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:46:14,410 - notion_sync - ERROR - Attempt 2 failed: list index out of range. Retrying in 10 seconds...
+2025-01-14 15:46:25,621 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:46:25,623 - notion_sync - ERROR - Attempt 3 failed: list index out of range. Retrying in 20 seconds...
+2025-01-14 15:46:45,624 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 0 records synced.
+2025-01-14 15:49:20,771 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 15:49:21,439 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:49:21,824 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:49:25,086 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 15:49:25,086 - notion_sync - INFO - Created new record with responsible: 1
+2025-01-14 15:49:25,583 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:49:26,212 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 15:49:26,214 - notion_sync - INFO - Created new record with responsible: 15
+2025-01-14 15:49:26,871 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:49:28,164 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 15:49:28,165 - notion_sync - INFO - Created new record with responsible: 28
+2025-01-14 15:49:28,463 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:49:29,186 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 15:49:29,187 - notion_sync - INFO - Created new record with responsible: 6
+2025-01-14 15:49:29,187 - notion_sync - INFO - ✅ Successfully synced 4 records.
+2025-01-14 15:49:29,187 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 4 records synced.
+2025-01-14 15:50:30,145 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 15:50:31,174 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:50:31,177 - notion_sync - ERROR - Attempt 1 failed: list index out of range. Retrying in 5 seconds...
+2025-01-14 15:50:36,647 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:50:36,653 - notion_sync - ERROR - Attempt 2 failed: list index out of range. Retrying in 10 seconds...
+2025-01-14 15:50:47,154 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:50:47,160 - notion_sync - ERROR - Attempt 3 failed: list index out of range. Retrying in 20 seconds...
+2025-01-14 15:51:07,161 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 0 records synced.
+2025-01-14 15:54:47,966 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 15:54:48,690 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:54:48,700 - notion_sync - ERROR - Attempt 1 failed: list index out of range. Retrying in 5 seconds...
+2025-01-14 15:54:54,135 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:54:54,141 - notion_sync - ERROR - Attempt 2 failed: list index out of range. Retrying in 10 seconds...
+2025-01-14 15:55:05,087 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 15:55:05,089 - notion_sync - ERROR - Attempt 3 failed: list index out of range. Retrying in 20 seconds...
+2025-01-14 15:55:25,090 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 0 records synced.
+2025-01-14 16:03:53,116 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 16:03:54,199 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:03:54,199 - notion_sync - ERROR - Attempt 1 failed: list index out of range. Retrying in 5 seconds...
+2025-01-14 16:03:59,866 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:03:59,867 - notion_sync - ERROR - Attempt 2 failed: list index out of range. Retrying in 10 seconds...
+2025-01-14 16:04:10,317 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:04:10,318 - notion_sync - ERROR - Attempt 3 failed: list index out of range. Retrying in 20 seconds...
+2025-01-14 16:04:30,319 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 0 records synced.
+2025-01-14 16:07:24,552 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 16:07:25,166 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:07:25,167 - notion_sync - ERROR - Attempt 1 failed: list index out of range. Retrying in 5 seconds...
+2025-01-14 16:07:31,059 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:07:31,060 - notion_sync - ERROR - Attempt 2 failed: list index out of range. Retrying in 10 seconds...
+2025-01-14 16:07:41,778 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:07:41,780 - notion_sync - ERROR - Attempt 3 failed: list index out of range. Retrying in 20 seconds...
+2025-01-14 16:08:01,781 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 0 records synced.
+2025-01-14 16:17:45,968 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 16:17:46,944 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:17:46,944 - notion_sync - ERROR - Attempt 1 failed: list index out of range. Retrying in 5 seconds...
+2025-01-14 16:17:52,790 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:17:52,791 - notion_sync - ERROR - Attempt 2 failed: list index out of range. Retrying in 10 seconds...
+2025-01-14 16:18:03,786 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:18:03,787 - notion_sync - ERROR - Attempt 3 failed: list index out of range. Retrying in 20 seconds...
+2025-01-14 16:18:23,788 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 0 records synced.
+2025-01-14 16:18:59,364 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 16:18:59,978 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:01,840 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-8124-9ec4-ccbbc4adbf04 "HTTP/1.1 200 OK"
+2025-01-14 16:19:01,841 - notion_sync - INFO - Successfully archived page with ID: 17b3a17e-5d7f-8124-9ec4-ccbbc4adbf04
+2025-01-14 16:19:01,841 - notion_sync - INFO - Archived page with missing BU ID: 17b3a17e-5d7f-8124-9ec4-ccbbc4adbf04
+2025-01-14 16:19:04,299 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-816b-82ce-f32036e2b0b3 "HTTP/1.1 200 OK"
+2025-01-14 16:19:04,300 - notion_sync - INFO - Successfully archived page with ID: 17b3a17e-5d7f-816b-82ce-f32036e2b0b3
+2025-01-14 16:19:04,300 - notion_sync - INFO - Archived page with missing BU ID: 17b3a17e-5d7f-816b-82ce-f32036e2b0b3
+2025-01-14 16:19:05,517 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-818f-b4c7-d8a1c61c8223 "HTTP/1.1 200 OK"
+2025-01-14 16:19:05,518 - notion_sync - INFO - Successfully archived page with ID: 17b3a17e-5d7f-818f-b4c7-d8a1c61c8223
+2025-01-14 16:19:05,518 - notion_sync - INFO - Archived page with missing BU ID: 17b3a17e-5d7f-818f-b4c7-d8a1c61c8223
+2025-01-14 16:19:06,317 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-81e4-b033-ff008c529f5a "HTTP/1.1 200 OK"
+2025-01-14 16:19:06,318 - notion_sync - INFO - Successfully archived page with ID: 17b3a17e-5d7f-81e4-b033-ff008c529f5a
+2025-01-14 16:19:06,318 - notion_sync - INFO - Archived page with missing BU ID: 17b3a17e-5d7f-81e4-b033-ff008c529f5a
+2025-01-14 16:19:06,725 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:07,586 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 16:19:07,587 - notion_sync - INFO - Created new record for BU ID: 1
+2025-01-14 16:19:08,614 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:09,953 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 16:19:09,954 - notion_sync - INFO - Created new record for BU ID: 15
+2025-01-14 16:19:10,485 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:11,764 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 16:19:11,765 - notion_sync - INFO - Created new record for BU ID: 28
+2025-01-14 16:19:12,061 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:13,528 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2025-01-14 16:19:13,528 - notion_sync - INFO - Created new record for BU ID: 6
+2025-01-14 16:19:13,528 - notion_sync - INFO - ✅ Successfully synced 4 records.
+2025-01-14 16:19:13,528 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 4 records synced.
+2025-01-14 16:19:30,920 - nontion_sync.tasks - INFO - Processing NotionDbConfig: BU by Monses
+2025-01-14 16:19:31,769 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:32,113 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:32,811 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-8198-92a6-d6f85d5a9618 "HTTP/1.1 200 OK"
+2025-01-14 16:19:32,812 - notion_sync - INFO - Updated record for BU ID: 1
+2025-01-14 16:19:33,166 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:36,554 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-8130-a24f-f5a368983e5e "HTTP/1.1 200 OK"
+2025-01-14 16:19:36,555 - notion_sync - INFO - Updated record for BU ID: 15
+2025-01-14 16:19:37,069 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:38,416 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-812a-866b-edd92a8c0051 "HTTP/1.1 200 OK"
+2025-01-14 16:19:38,417 - notion_sync - INFO - Updated record for BU ID: 28
+2025-01-14 16:19:39,289 - httpx - INFO - HTTP Request: POST https://api.notion.com/v1/databases/1743a17e5d7f801b8009d5b5788e8c00/query "HTTP/1.1 200 OK"
+2025-01-14 16:19:39,846 - httpx - INFO - HTTP Request: PATCH https://api.notion.com/v1/pages/17b3a17e-5d7f-8146-8225-c04d29adec7a "HTTP/1.1 200 OK"
+2025-01-14 16:19:39,847 - notion_sync - INFO - Updated record for BU ID: 6
+2025-01-14 16:19:39,847 - notion_sync - INFO - ✅ Successfully synced 4 records.
+2025-01-14 16:19:39,847 - nontion_sync.tasks - INFO - ✅ Sync result for 1743a17e5d7f801b8009d5b5788e8c00: Sync completed. 4 records synced.
