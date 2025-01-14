@@ -173,7 +173,7 @@ class NotionBuReportConnector:
                 # Групуємо дані за business_unit_id і підраховуємо значення для кожного місяця
                 business_unit_data = (
                     NotionOrders.objects
-                    .values('business_unit_id', 'business_unit' )  # Групуємо за "business_unit_id"
+                    .values('business_unit_id', 'business_unit')
                     .annotate(
                         jan=Sum('order_cost', filter=Q(finish_date__month=1)),
                         feb=Sum('order_cost', filter=Q(finish_date__month=2)),
@@ -197,20 +197,23 @@ class NotionBuReportConnector:
                 notion_pages = query_response.get("results", [])
 
                 # Створюємо набір всіх service_id, які зараз є в базі Notion
-                notion_service_ids = {
-                page['properties']['BU ID']['rich_text'][0]['text']['content']
-                for page in notion_pages
-                if 'BU ID' in page['properties']
-                and page['properties']['BU ID'].get('rich_text')
-                and len(page['properties']['BU ID']['rich_text']) > 0
-}
+                notion_service_ids = set()
 
-                # Створення нових або оновлення записів, також видалення непотрібних
+                for page in notion_pages:
+                    rich_text = page['properties']['BU ID']['rich_text']
+                    if not rich_text:
+                        # Архівуємо сторінки без BU ID
+                        page_id = page['id']
+                        self._archive_page(page_id)
+                        logger.info(f"Archived page with missing BU ID: {page_id}")
+                    else:
+                        notion_service_ids.add(rich_text[0]['text']['content'])
+
+                # Створення нових або оновлення записів
                 for res in business_unit_data:
                     notion_data = self._prepare_service_data(res)
                     self._update_or_create_record(res['business_unit_id'], notion_data)
                     records_synced += 1
-                    # Видалення з Notion, якщо запису немає в нових даних
                     notion_service_ids.discard(str(res['business_unit_id']))
 
                 # Видаляємо з Notion сервіси, яких немає в нових даних
@@ -218,7 +221,7 @@ class NotionBuReportConnector:
                     self._delete_record_from_notion(service_id_to_remove)
 
                 logger.info(f"✅ Successfully synced {records_synced} records.")
-                break  # Виходимо з циклу, якщо успішно
+                break
 
             except Exception as e:
                 logger.error(f"Attempt {attempt} failed: {str(e)}. Retrying in {timeout} seconds...")
@@ -229,7 +232,6 @@ class NotionBuReportConnector:
 
     def _prepare_service_data(self, service):
         """Підготовка даних для передачі в Notion."""
-        # Витягуємо значення для кожного місяця
         month_columns = {
             "1.25": service.get('jan', 0) or 0,
             "2.25": service.get('feb', 0) or 0,
@@ -249,12 +251,14 @@ class NotionBuReportConnector:
             "BU Name": {
                 "title": [{"type": "text", "text": {"content": service['business_unit']}}]
             },
+            "BU ID": {
+                "rich_text": [{"type": "text", "text": {"content": str(service['business_unit_id'])}}]
+            },
             **{key: {"number": float(value)} for key, value in month_columns.items()},
         }
 
     def _update_or_create_record(self, business_unit_id, data):
         """Оновлює або створює запис у базі Notion."""
-        # Отримуємо наявні сторінки в Notion
         query_response = self.notion.databases.query(
             database_id=self.database_id,
             filter={"property": "BU ID", "rich_text": {"equals": str(business_unit_id)}}
@@ -262,35 +266,33 @@ class NotionBuReportConnector:
         pages = query_response.get("results", [])
 
         if pages:
-            # Оновлюємо існуючий запис
             page_id = pages[0]['id']
             self.notion.pages.update(page_id=page_id, properties=data)
-            logger.info(f"Updated record with responsible: {business_unit_id}")
+            logger.info(f"Updated record for BU ID: {business_unit_id}")
         else:
-            # Створюємо новий запис
             self.notion.pages.create(parent={"database_id": self.database_id}, properties=data)
-            logger.info(f"Created new record with responsible: {business_unit_id}")
-    
+            logger.info(f"Created new record for BU ID: {business_unit_id}")
+
     def _delete_record_from_notion(self, business_unit_id):
-        """Архівує запис з бази Notion"""
+        """Архівує запис з бази Notion."""
         query_response = self.notion.databases.query(
             database_id=self.database_id,
             filter={"property": "BU ID", "rich_text": {"equals": str(business_unit_id)}}
         )
-        
         pages = query_response.get("results", [])
-        
+
         if pages:
             for page in pages:
                 page_id = page['id']
-                try:
-                    # Архівуємо сторінку 
-                    self.notion.pages.update(page_id=page_id, archived=True)
-                    logger.info(f"Archived record with service_id: {business_unit_id} and page_id: {page_id}")
-                except Exception as e:
-                    logger.error(f"Failed to archive page with service_id: {business_unit_id}. Error: {str(e)}")
-        else:
-            logger.warning(f"No page found for service_id: {business_unit_id}")
+                self._archive_page(page_id)
+
+    def _archive_page(self, page_id):
+        """Архівує сторінку у базі Notion."""
+        try:
+            self.notion.pages.update(page_id=page_id, archived=True)
+            logger.info(f"Successfully archived page with ID: {page_id}")
+        except Exception as e:
+            logger.error(f"Failed to archive page with ID: {page_id}. Error: {str(e)}")
 
 # Формування звіту по послугам наданим в ордерах
 class NotionServiceReportConnector:
