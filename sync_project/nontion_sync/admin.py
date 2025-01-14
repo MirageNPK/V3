@@ -3,7 +3,7 @@ from .models import NotionDbConfig, NotionOrders
 
 @admin.register(NotionDbConfig)
 class ConfigAdmin(admin.ModelAdmin):
-    list_display = ["name", "notion_token", "database_id_from", "database_id_to","is_active"]# Register your models here.
+    list_display = ["name", "notion_token", "database_id", "is_active"]# Register your models here.
 
 @admin.register(NotionOrders)
 class ConfigAdmin(admin.ModelAdmin):

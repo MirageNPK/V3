@@ -8,6 +8,7 @@ from django.db.models.functions import ExtractMonth
 from hashlib import md5
 import os
 import sys
+
 # logger = logging.getLogger(__name__)
 # Створюємо директорію для логів, якщо її ще немає
 log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
@@ -196,7 +197,13 @@ class NotionBuReportConnector:
                 notion_pages = query_response.get("results", [])
 
                 # Створюємо набір всіх service_id, які зараз є в базі Notion
-                notion_service_ids = {page['properties']['BU ID']['rich_text'][0]['text']['content'] for page in notion_pages}
+                notion_service_ids = {
+                page['properties']['BU ID']['rich_text'][0]['text']['content']
+                for page in notion_pages
+                if 'BU ID' in page['properties']
+                and page['properties']['BU ID'].get('rich_text')
+                and len(page['properties']['BU ID']['rich_text']) > 0
+}
 
                 # Створення нових або оновлення записів, також видалення непотрібних
                 for res in business_unit_data:
@@ -552,3 +559,477 @@ class NotionConnector:
 
         logger.info(f"Sync completed. {records_synced}/{total_records} records synced.")
         return f"Sync completed. {records_synced}/{total_records} records synced."
+
+
+
+
+class WorkloadCalculator:
+    def __init__(self, notion_token, project_tasks_database_id, closing_tasks_database_id, orders_database_id):
+        self.notion = Client(auth=notion_token)
+        self.project_tasks_database_id = project_tasks_database_id
+        self.closing_tasks_database_id = closing_tasks_database_id
+        self.orders_database_id = orders_database_id
+
+    def get_all_tasks(self, database_id):
+        tasks = []
+        has_more = True
+        start_cursor = None
+
+        while has_more:
+            try:
+                response = self.notion.databases.query(
+                    database_id=database_id,
+                    start_cursor=start_cursor
+                )
+                tasks.extend(response.get("results", []))
+                has_more = response.get("has_more", False)
+                start_cursor = response.get("next_cursor")
+            except Exception as e:
+                logger.error(f"Error fetching tasks from database {database_id}: {e}")
+                break
+        return tasks
+
+    def calculate_workload(self):
+        workload_data = {}
+
+        # Fetch project tasks
+        project_tasks = self.get_all_tasks(self.project_tasks_database_id)
+        logger.info(f"Number of project tasks: {len(project_tasks)}")
+        for task in project_tasks:
+            properties = task.get("properties", {})
+            if not properties:
+                logger.info(f"Skipping task due to missing properties: {task}")
+                continue
+
+            people = properties.get("Person", {}).get("people", [])
+            person = people[0].get("name", "Unknown") if people else "Нерозподілені години"
+            hours = properties.get("Hours plan", {}).get("number")
+            if hours is None or hours <= 0:
+                continue
+
+            finish_date = properties.get("Finish", {}).get("date", {}).get("start")
+            if not finish_date:
+                continue
+
+            try:
+                month_key = datetime.strptime(finish_date, "%Y-%m-%d").strftime("%m.%y")
+                workload_data.setdefault(person, {}).setdefault(month_key, 0)
+                workload_data[person][month_key] += hours
+            except ValueError as e:
+                logger.error(f"Error processing date for {person}: {e}")
+
+        # Fetch closing tasks
+        closing_tasks = self.get_all_tasks(self.closing_tasks_database_id)
+        logger.info(f"Number of closing tasks: {len(closing_tasks)}")
+        for task in closing_tasks:
+            properties = task.get("properties", {})
+            if not properties:
+                continue
+
+            people = properties.get("Person", {}).get("people", [])
+            person = people[0].get("name", "Unknown") if people else "Нерозподілені години"
+            hours = properties.get("Plan Hours", {}).get("number")
+            ddl_date = properties.get("Data DDL", {}).get("formula", {}).get("string")
+
+            if hours is None or hours <= 0 or not ddl_date:
+                continue
+
+            try:
+                month_key = datetime.strptime(ddl_date, "%Y-%m-%d").strftime("%m.%y")
+                workload_data.setdefault(person, {}).setdefault(month_key, 0)
+                workload_data[person][month_key] += hours
+            except ValueError as e:
+                logger.error(f"Error processing DDL date for {person}: {e}")
+
+        # Fetch orders
+        orders = self.get_all_tasks(self.orders_database_id)
+        logger.info(f"Number of orders: {len(orders)}")
+        for order in orders:
+            properties = order.get("properties", {})
+            if not properties:
+                continue
+
+            people = properties.get("Responsible", {}).get("people", [])
+            person = people[0].get("name", "Unknown") if people else "Нерозподілені години"
+            hours = properties.get("Plan hours", {}).get("number")
+            ddl_date = properties.get("DDL", {}).get("date", {}).get("start")
+
+            if hours is None or hours <= 0 or not ddl_date:
+                continue
+
+            try:
+                month_key = datetime.strptime(ddl_date, "%Y-%m-%d").strftime("%m.%y")
+                workload_data.setdefault(person, {}).setdefault(month_key, 0)
+                workload_data[person][month_key] += hours
+            except ValueError as e:
+                logger.error(f"Error processing DDL date for {person}: {e}")
+
+        # Convert hours into workload ratios
+        for person, months in workload_data.items():
+            for month, hours in months.items():
+                workload_data[person][month] = round(hours / 130, 2)
+
+        return workload_data
+
+class NotionWorkloadSync:
+    def __init__(self, notion_token, database_id):
+        self.notion = Client(auth=notion_token)
+        self.database_id = database_id
+
+    def sync_workload(self, workload_data):
+        month_keys = [
+            "01.25", "02.25", "03.25", "04.25", "05.25", "06.25", 
+            "07.25", "08.25", "09.25", "10.25", "11.25", "12.25",
+            "01.26", "02.26", "03.26", "04.26", "05.26", "06.26"
+        ]
+
+        retries = 3
+        timeout = 5
+        records_synced = 0
+
+        for attempt in range(1, retries + 1):
+            try:
+                query_response = self.notion.databases.query(database_id=self.database_id)
+                notion_pages = query_response.get("results", [])
+
+                notion_person_pages = {}
+                for page in notion_pages:
+                    properties = page.get("properties", {})
+                    responsible_name = properties.get("Responsible Name", {}).get("title", [])
+                    if responsible_name:
+                        name = responsible_name[0]["text"]["content"]
+                        notion_person_pages[name] = page["id"]
+
+                processed_people = set()
+
+                for person, months in workload_data.items():
+                    notion_data = self._prepare_workload_data(person, months, month_keys)
+                    logger.info(f"Prepared data for {person}: {notion_data}")
+
+                    existing_page_id = notion_person_pages.get(person)
+                    if existing_page_id:
+                        existing_page = self.notion.pages.retrieve(page_id=existing_page_id)
+                        existing_properties = existing_page.get("properties", {})
+
+                        updated_data = False
+                        for month_key in month_keys:
+                            # Перевіряємо, чи є зміни для місяців
+                            current_value = existing_properties.get(month_key, {}).get("number", 0)
+                            new_value = notion_data.get(month_key, {}).get("number", 0)
+
+                            # Якщо нове значення відрізняється від поточного, оновлюємо
+                            if current_value != new_value:
+                                existing_properties[month_key] = {"number": new_value}
+                                updated_data = True
+
+                        # Оновлюємо запис, якщо є зміни
+                        if updated_data:
+                            self._update_record(existing_page_id, existing_properties)
+                        else:
+                            logger.info(f"No changes for {person}, skipping update.")
+                    else:
+                        self._create_record(notion_data)
+
+                    records_synced += 1
+                    processed_people.add(person)
+
+                # Видаляємо записи, яких немає в новому списку
+                records_deleted = 0
+                for person_to_remove in set(notion_person_pages.keys()) - processed_people:
+                    try:
+                        self._delete_record_from_notion(notion_person_pages[person_to_remove])
+                        records_deleted += 1
+                    except Exception as e:
+                        logger.error(f"Failed to delete record for {person_to_remove}: {str(e)}")
+
+                logger.info(f"\u2705 Successfully synced {records_synced} records and deleted {records_deleted} records.")
+                break
+
+            except Exception as e:
+                logger.error(f"Attempt {attempt} failed: {str(e)}. Retrying in {timeout} seconds...")
+                time.sleep(timeout)
+                timeout *= 2
+
+        return f"Sync completed. {records_synced} records synced."
+
+    def _prepare_workload_data(self, person, months, month_keys):
+        # Підготовка даних для запису, використовуючи місяці та значення
+        month_columns = {}
+        for month in month_keys:
+            month_columns[month] = {"number": months.get(month, 0) or 0}
+        
+        return {
+            "Responsible Name": {
+                "title": [{"type": "text", "text": {"content": person}}]
+            },
+            **month_columns,
+        }
+
+    def _update_record(self, page_id, data):
+        try:
+            logger.info(f"Updating record for page {page_id} with data: {data}")
+            response = self.notion.pages.update(page_id=page_id, properties=data)
+            if response.get("properties"):
+                logger.info(f"Successfully updated record for page {page_id}: {response}")
+            else:
+                logger.warning(f"Update for page {page_id} failed. Response: {response}")
+        except Exception as e:
+            logger.error(f"Failed to update record for page {page_id}: {e}")
+
+    def _create_record(self, data):
+        try:
+            logger.info(f"Creating record with data: {data}")
+            response = self.notion.pages.create(parent={"database_id": self.database_id}, properties=data)
+            logger.info(f"Successfully created record: {response}")
+        except Exception as e:
+            logger.error(f"Failed to create record: {e}")
+
+    def _delete_record_from_notion(self, page_id):
+        try:
+            logger.info(f"Archiving record with page ID {page_id}")
+            response = self.notion.pages.update(page_id=page_id, archived=True)
+            logger.info(f"Successfully archived record: {response}")
+        except Exception as e:
+            logger.error(f"Failed to archive record with page ID {page_id}: {e}")
+            raise
+
+
+class WorkloadTempCalculator:
+    def __init__(self, notion_token, project_tasks_database_id, closing_tasks_database_id, orders_database_id):
+        self.notion = Client(auth=notion_token)
+        self.project_tasks_database_id = project_tasks_database_id
+        self.closing_tasks_database_id = closing_tasks_database_id
+        self.orders_database_id = orders_database_id
+
+    def get_all_tasks(self, database_id):
+        tasks = []
+        has_more = True
+        start_cursor = None
+
+        while has_more:
+            try:
+                response = self.notion.databases.query(
+                    database_id=database_id,
+                    start_cursor=start_cursor
+                )
+                tasks.extend(response.get("results", []))
+                has_more = response.get("has_more", False)
+                start_cursor = response.get("next_cursor")
+            except Exception as e:
+                logger.error(f"Error fetching tasks from database {database_id}: {e}")
+                break
+        return tasks
+
+    def calculate_workload(self):
+        workload_data = {}
+
+        # Fetch project tasks
+        project_tasks = self.get_all_tasks(self.project_tasks_database_id)
+        logger.info(f"Number of project tasks: {len(project_tasks)}")
+        for task in project_tasks:
+          
+            properties = task.get("properties", {})
+            if not properties:
+                logger.info(f"Skipping task due to missing properties: {task}")
+                continue
+
+            people = properties.get("Resposible", {}).get("select", {})
+            person = people.get("name", "Unknown") if people else "Нерозподілені години"
+            
+            hours = properties.get("Hours plan", {}).get("number")
+            if hours is None or hours <= 0:
+                continue
+
+            finish_date = properties.get("Finish", {}).get("date", {}).get("start")
+            if not finish_date:
+                continue
+
+            try:
+                month_key = datetime.strptime(finish_date, "%Y-%m-%d").strftime("%m.%y")
+                workload_data.setdefault(person, {}).setdefault(month_key, 0)
+                workload_data[person][month_key] += hours
+            except ValueError as e:
+                logger.error(f"Error processing date for {person}: {e}")
+
+        # Fetch closing tasks
+        closing_tasks = self.get_all_tasks(self.closing_tasks_database_id)
+        logger.info(f"Number of closing tasks: {len(closing_tasks)}")
+        for task in closing_tasks:
+            
+            properties = task.get("properties", {})
+            if not properties:
+                continue
+
+            people = properties.get("Who", {}).get("select", {})
+            person = people.get("name", "Unknown") if people else "Нерозподілені години"
+            
+            hours = properties.get("Plan Hours", {}).get("number")
+            ddl_date = properties.get("Data DDL", {}).get("formula", {}).get("date", {}).get("start", None)
+            
+
+            if hours is None or hours <= 0 or not ddl_date:
+                continue
+
+            try:
+                parsed_date = datetime.fromisoformat(ddl_date.replace("Z", "+00:00"))  # Враховуємо часову зону
+                month_key = parsed_date.strftime("%m.%y")  # Форматуємо місяць.рік
+                
+                workload_data.setdefault(person, {}).setdefault(month_key, 0)
+                workload_data[person][month_key] += hours
+            except ValueError as e:
+                logger.error(f"Error processing DDL date for {person}: {e}")
+
+        # Fetch orders
+        orders = self.get_all_tasks(self.orders_database_id)
+        logger.info(f"Number of orders: {len(orders)}")
+        for order in orders:
+            properties = order.get("properties", {})
+            if not properties:
+                continue
+
+            people = properties.get("Responsible", {}).get("people", [])
+            person = people[0].get("name", "Unknown") if people else "Нерозподілені години"
+            hours = properties.get("Plan hours", {}).get("number")
+            ddl_date = properties.get("DDL", {}).get("date", {}).get("start")
+
+            if hours is None or hours <= 0 or not ddl_date:
+                continue
+
+            try:
+                month_key = datetime.strptime(ddl_date, "%Y-%m-%d").strftime("%m.%y")
+                workload_data.setdefault(person, {}).setdefault(month_key, 0)
+                workload_data[person][month_key] += hours
+            except ValueError as e:
+                logger.error(f"Error processing DDL date for {person}: {e}")
+
+        # Convert hours into workload ratios
+        for person, months in workload_data.items():
+            for month, hours in months.items():
+                workload_data[person][month] = round(hours / 130, 2)
+
+        return workload_data
+
+class NotionWorkloadtempSync:
+    def __init__(self, notion_token, database_id):
+        self.notion = Client(auth=notion_token)
+        self.database_id = database_id
+
+    def sync_workload(self, workload_data):
+        month_keys = [
+            "01.25", "02.25", "03.25", "04.25", "05.25", "06.25", 
+            "07.25", "08.25", "09.25", "10.25", "11.25", "12.25",
+            "01.26", "02.26", "03.26", "04.26", "05.26", "06.26"
+        ]
+
+        retries = 3
+        timeout = 5
+        records_synced = 0
+
+        for attempt in range(1, retries + 1):
+            try:
+                query_response = self.notion.databases.query(database_id=self.database_id)
+                notion_pages = query_response.get("results", [])
+
+                notion_person_pages = {}
+                for page in notion_pages:
+                    properties = page.get("properties", {})
+                    responsible_name = properties.get("Responsible Name", {}).get("title", [])
+                    if responsible_name:
+                        name = responsible_name[0]["text"]["content"]
+                        notion_person_pages[name] = page["id"]
+
+                processed_people = set()
+
+                for person, months in workload_data.items():
+                    notion_data = self._prepare_workload_data(person, months, month_keys)
+                    logger.info(f"Prepared data for {person}: {notion_data}")
+
+                    existing_page_id = notion_person_pages.get(person)
+                    if existing_page_id:
+                        existing_page = self.notion.pages.retrieve(page_id=existing_page_id)
+                        existing_properties = existing_page.get("properties", {})
+
+                        updated_data = False
+                        for month_key in month_keys:
+                            # Перевіряємо, чи є зміни для місяців
+                            current_value = existing_properties.get(month_key, {}).get("number", 0)
+                            new_value = notion_data.get(month_key, {}).get("number", 0)
+
+                            # Якщо нове значення відрізняється від поточного, оновлюємо
+                            if current_value != new_value:
+                                existing_properties[month_key] = {"number": new_value}
+                                updated_data = True
+
+                        # Оновлюємо запис, якщо є зміни
+                        if updated_data:
+                            self._update_record(existing_page_id, existing_properties)
+                        else:
+                            logger.info(f"No changes for {person}, skipping update.")
+                    else:
+                        self._create_record(notion_data)
+
+                    records_synced += 1
+                    processed_people.add(person)
+
+                # Видаляємо записи, яких немає в новому списку
+                records_deleted = 0
+                for person_to_remove in set(notion_person_pages.keys()) - processed_people:
+                    try:
+                        self._delete_record_from_notion(notion_person_pages[person_to_remove])
+                        records_deleted += 1
+                    except Exception as e:
+                        logger.error(f"Failed to delete record for {person_to_remove}: {str(e)}")
+
+                logger.info(f"\u2705 Successfully synced {records_synced} records and deleted {records_deleted} records.")
+                break
+
+            except Exception as e:
+                logger.error(f"Attempt {attempt} failed: {str(e)}. Retrying in {timeout} seconds...")
+                time.sleep(timeout)
+                timeout *= 2
+
+        return f"Sync completed. {records_synced} records synced."
+
+    def _prepare_workload_data(self, person, months, month_keys):
+        # Підготовка даних для запису, використовуючи місяці та значення
+        month_columns = {}
+        for month in month_keys:
+            month_columns[month] = {"number": months.get(month, 0) or 0}
+        
+        return {
+            "Responsible Name": {
+                "title": [{"type": "text", "text": {"content": person}}]
+            },
+            **month_columns,
+        }
+
+    def _update_record(self, page_id, data):
+        try:
+            logger.info(f"Updating record for page {page_id} with data: {data}")
+            response = self.notion.pages.update(page_id=page_id, properties=data)
+            if response.get("properties"):
+                logger.info(f"Successfully updated record for page {page_id}: {response}")
+            else:
+                logger.warning(f"Update for page {page_id} failed. Response: {response}")
+        except Exception as e:
+            logger.error(f"Failed to update record for page {page_id}: {e}")
+
+    def _create_record(self, data):
+        try:
+            logger.info(f"Creating record with data: {data}")
+            response = self.notion.pages.create(parent={"database_id": self.database_id}, properties=data)
+            logger.info(f"Successfully created record: {response}")
+        except Exception as e:
+            logger.error(f"Failed to create record: {e}")
+
+    def _delete_record_from_notion(self, page_id):
+        try:
+            logger.info(f"Archiving record with page ID {page_id}")
+            response = self.notion.pages.update(page_id=page_id, archived=True)
+            logger.info(f"Successfully archived record: {response}")
+        except Exception as e:
+            logger.error(f"Failed to archive record with page ID {page_id}: {e}")
+            raise
+
+
+

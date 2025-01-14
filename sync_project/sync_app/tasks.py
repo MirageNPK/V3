@@ -2,7 +2,9 @@ import traceback
 import logging
 from .notion_connector import NotionConnector
 from .models import NotionConfig
+from sync_project.celery import app
 
+@app.task
 def bu_projects():
     try:
         print("🔹 Starting Notion sync process...")

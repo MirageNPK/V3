@@ -4,8 +4,7 @@ from django.db import models
 class NotionDbConfig(models.Model):
     name = models.CharField(max_length=255)
     notion_token = models.CharField(max_length=255)
-    database_id_from = models.CharField(max_length=255)
-    database_id_to = models.CharField(max_length=255)
+    database_id = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     
     def __str__(self):
