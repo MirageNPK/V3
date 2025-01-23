@@ -124,13 +124,14 @@ def sync_notion_workload(*args, **kwargs):
                 closing_tasks_database_id="13e3a17e5d7f804b893df6008ef0f629",
                 orders_database_id="13e3a17e5d7f80da9a55e1a01feda7b3"
             )
-            workload_data = calculator.calculate_workload()
+            workload_data, workload_hours_data = calculator.calculate_workload()
 
             syncer = NotionWorkloadSync(
                 notion_token=config.notion_token,
                 database_id=config.database_id
             )
-            result = syncer.sync_workload(workload_data)
+            # Оновлена логіка для синхронізації нових полів
+            result = syncer.sync_workload(workload_data, workload_hours_data)
 
             logger.info(f"✅ Sync result for {config.database_id}: {result}")
             print(f"✅ {result}")

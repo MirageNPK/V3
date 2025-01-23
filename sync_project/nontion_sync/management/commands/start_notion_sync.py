@@ -15,7 +15,7 @@ class Command(BaseCommand):
             # sync_notion_responsible_report()
             # sync_notion_bunit_report()
             sync_notion_workload ()
-            sync_notion_workloadtemporary()
+            # sync_notion_workloadtemporary()
             self.stdout.write("✅ Sync completed successfully.")
         except Exception as e:
             logger.error(f"Critical error during Service Report Sync: {str(e)}")
