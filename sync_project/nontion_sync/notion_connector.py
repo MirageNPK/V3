@@ -157,6 +157,9 @@ class NotionResponsibleReportConnector:
         else:
             logger.warning(f"No page found for service_id: {responsible}")
 
+
+
+
 # Формування звіту по бізнесюнітам які роблять замовлення
 class NotionBuReportConnector:
     def __init__(self, notion_token, database_id):
@@ -293,6 +296,9 @@ class NotionBuReportConnector:
             logger.info(f"Successfully archived page with ID: {page_id}")
         except Exception as e:
             logger.error(f"Failed to archive page with ID: {page_id}. Error: {str(e)}")
+
+
+
 
 # Формування звіту по послугам наданим в ордерах
 class NotionServiceReportConnector:
@@ -448,42 +454,48 @@ class NotionConnector:
 
         for attempt in range(1, retries + 1):
             try:
+                # Отримуємо всі записи з бази Notion
                 response = self.notion.databases.query(database_id=self.database_id)
                 notion_records = response.get("results", [])
-                notion_ids = set(record["id"] for record in notion_records)
                 total_records = len(notion_records)
+                notion_ids = set(record["id"] for record in notion_records)
+
                 logger.info(f"Fetched {total_records} records from Notion.")
                 print(f"📊 Fetched {total_records} records.")
 
-                # Fetch all local records
+                # Отримуємо всі локальні записи
                 local_records = NotionOrders.objects.all()
                 local_ids = set(record.order_id for record in local_records)
 
-                # Detect deleted records
+                # Видаляємо записи, яких більше немає в Notion
                 deleted_ids = local_ids - notion_ids
                 if deleted_ids:
                     NotionOrders.objects.filter(order_id__in=deleted_ids).delete()
                     logger.info(f"Deleted {len(deleted_ids)} records removed from Notion.")
 
+                # Оновлення та створення записів
                 for record in notion_records:
                     try:
                         properties = record.get("properties", {})
                         order_id = record.get("id", "Unknown Order ID")
 
-                        # Extract fields
+                        # Витягуємо дані з властивостей Notion
                         name = properties.get("Name service", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Service")
                         service_name = (
                             properties.get("Services and category text", {})
                             .get("rollup", {})
                             .get("array", [{}])[0]
-                            .get("title", [{}])[0]
-                            .get("plain_text", "Unknown Service")
-                        )
-                        service_id = int(
-                            properties.get("ID Service", {})
                             .get("rich_text", [{}])[0]
                             .get("text", {})
-                            .get("content", 0)
+                            .get("content", "Unknown Service")
+                        )
+                        service_id = (
+                            properties.get("ID serv", {})
+                            .get("rollup", {})
+                            .get("array", [{}])[0]
+                            .get("rich_text", [{}])[0]
+                            .get("text", {})
+                            .get("content", "0")
                         )
                         order_cost = float(
                             properties.get("Order Cost", {})
@@ -515,24 +527,37 @@ class NotionConnector:
                             .get("number", 0)
                         )
 
-                        # Calculate hash for current record
+                        # Рахуємо хеш запису для перевірки змін
                         current_hash = self.calculate_record_hash(record)
 
-                        # Check if record exists and has changed
+                        # Перевіряємо, чи існує запис у локальній базі
                         existing_record = NotionOrders.objects.filter(order_id=order_id).first()
+
                         if existing_record:
-                            # Check for changes in any critical fields, even if hash is the same
-                            if existing_record.record_hash != current_hash or existing_record.order_cost != order_cost or existing_record.finish_date != finish_date:
+                            # Оновлюємо, якщо є зміни
+                            if (
+                                existing_record.record_hash != current_hash or
+                                existing_record.order_cost != order_cost or
+                                existing_record.finish_date != finish_date or
+                                existing_record.service_id != service_id or
+                                existing_record.business_unit_id != business_unit_id
+                            ):
+                                existing_record.name = name
+                                existing_record.service_name = service_name
+                                existing_record.service_id = service_id
                                 existing_record.order_cost = order_cost
                                 existing_record.finish_date = finish_date
+                                existing_record.responsible = responsible
+                                existing_record.business_unit = business_unit
+                                existing_record.business_unit_id = business_unit_id
                                 existing_record.record_hash = current_hash
                                 existing_record.save()
                                 logger.info(f"✅ Updated record: {order_id}")
                             else:
                                 logger.info(f"✅ No changes for record: {order_id}")
-                                continue  # Skip if no changes
+                                continue  # Пропускаємо, якщо змін немає
                         else:
-                            # New record
+                            # Створюємо новий запис
                             NotionOrders.objects.create(
                                 order_id=order_id,
                                 name=name,
@@ -552,8 +577,7 @@ class NotionConnector:
                         logger.warning(f"❌ Failed to sync record: {record.get('id')}")
                         logger.warning(record_error)
 
-                break  # Exit loop on success
-
+                break  # Успішна синхронізація, вихід із циклу
             except Exception as e:
                 logger.error(f"Attempt {attempt} failed. Retrying in {timeout} seconds...")
                 time.sleep(timeout)
