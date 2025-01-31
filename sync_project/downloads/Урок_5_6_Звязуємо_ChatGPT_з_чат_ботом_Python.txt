@@ -1,0 +1,64 @@
+import logging
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from openai import OpenAI
+
+# Initialize OpenAI client
+client = OpenAI(api_key="ваш ключ API від OpenAI")
+
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Initialize conversation history dictionary
+conversation_history = {}
+
+# Define the command handler for /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    user_id = user.id
+    conversation_history[user_id] = []
+    await update.message.reply_html(
+        rf'Hi {user.mention_html()}! Send me a message and I will respond using GPT-4.'
+    )
+
+# Define the message handler
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
+    user_message = update.message.text
+
+    if user_id not in conversation_history:
+        conversation_history[user_id] = []
+    conversation_history[user_id].append({"role": "user", "content": user_message})
+
+    try:
+        response = client.chat.completions.create(
+            model="ваша_модель_GPT",  # Тут лапки виправлені на правильні
+            messages=[{"role": "system", "content": "You are a helpful assistant."}] + conversation_history[user_id],
+            max_tokens=1000
+        )
+        reply = response.choices[0].message.content
+        conversation_history[user_id].append({"role": "assistant", "content": reply})
+    except Exception as e:
+        logger.error(f"Error in GPT-4 API call: {e}")
+        reply = "Sorry, I encountered an error while processing your request."
+
+    await update.message.reply_text(reply)
+
+def main() -> None:
+    # Set up the Application
+    application = Application.builder().token("ваш_код_від_телеграм_бота").build()
+
+    # Register the /start command handler
+    application.add_handler(CommandHandler("start", start))
+
+    # Register the message handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+
+    # Start the Bot
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()

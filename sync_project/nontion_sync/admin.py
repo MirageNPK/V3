@@ -1,10 +1,22 @@
 from django.contrib import admin
-from .models import NotionDbConfig, NotionOrders
+from .models import NotionDbConfig, NotionOrders, Project, Parent, Task
 
 @admin.register(NotionDbConfig)
 class ConfigAdmin(admin.ModelAdmin):
-    list_display = ["name", "notion_token", "database_id", "is_active"]# Register your models here.
+    list_display = ["name", "notion_token", "database_id", "is_active"]
 
 @admin.register(NotionOrders)
 class ConfigAdmin(admin.ModelAdmin):
-    list_display = ["name", "service_name", "service_id", "order_cost","finish_date"]# Register your models here.
+    list_display = ["name", "service_name", "service_id", "order_cost","finish_date"]
+
+@admin.register(Project)
+class ConfigAdmin(admin.ModelAdmin):
+    list_display = ["name", "direction", "start", "finish_fact","status"]
+
+@admin.register(Parent)
+class ConfigAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "start", "finish","progress"]
+
+@admin.register(Task)
+class ConfigAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "start", "finish","person","status"]
