@@ -3,6 +3,5 @@
 echo "logs/*.log" >> .gitignore
 git rm --cached sync_project/logs/notion_sync.log
 git commit -m "Ignore log files"
-# .gitignore
+
 .env
-sync_project/sync_project/settings.py
