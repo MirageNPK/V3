@@ -660,6 +660,7 @@ class NotionConnector:
                 notion_records = response.get("results", [])
                 total_records = len(notion_records)
                 notion_ids = set(record["id"] for record in notion_records)
+              
 
                 logger.info(f"Fetched {total_records} records from Notion.")
                 print(f"📊 Fetched {total_records} records.")
@@ -667,6 +668,7 @@ class NotionConnector:
                 # Отримуємо всі локальні записи
                 local_records = NotionOrders.objects.all()
                 local_ids = set(record.order_id for record in local_records)
+               
 
                 # Видаляємо записи, яких більше немає в Notion
                 deleted_ids = local_ids - notion_ids
@@ -725,7 +727,42 @@ class NotionConnector:
                             .get("text", {})
                             .get("content", "Unknown Business Unit") 
                         )
+
+                        description = ( properties.get("Essence or description", {})
+                            .get("rich_text", [{}])[0].get("text", {})
+                            .get("content", "Опис відсутній")
+                        )
+                        team =(properties.get("Exekutor Team", {})
+                            .get("rollup", {})
+                            .get("array", [{}])[0]
+                            .get("multi_select", [{}])[0]
+                            .get("name", "Не вказано")
+                        )
+
+                        cost_allocation_type = (
+                        properties.get("Distribution type", {})
+                        .get("select", {})
+                        .get("name", "Не вказано")
+                        )
+
+                        cost_allocation = (
+                        properties.get("Distribution between projects", {})
+                        .get("rich_text", [{}])[0]
+                        .get("text", {})
+                        .get("content", "Не вказано")
+                        ) 
                         
+
+                        hours_unit = (
+                        properties.get("hours or unit", {})
+                        .get("number", 0)  # Якщо значення немає, повертається 0
+                        )
+                        
+                        status = (
+                        properties.get("Status", {})
+                        .get("status", {})
+                        .get("name", "Не вказано")
+                        )
 
                         business_unit_id = int(
                             properties.get("BU ID", {})
@@ -733,6 +770,8 @@ class NotionConnector:
                             .get("array", [{}])[0]
                             .get("number", 0)
                         )
+
+                        
 
                         # Рахуємо хеш запису для перевірки змін
                         current_hash = self.calculate_record_hash(record)
@@ -747,6 +786,12 @@ class NotionConnector:
                                 existing_record.order_cost != order_cost or
                                 existing_record.finish_date != finish_date or
                                 existing_record.service_id != service_id or
+                                existing_record.description != description or
+                                existing_record.cost_allocation_type != cost_allocation_type or
+                                existing_record.cost_allocation != cost_allocation or
+                                existing_record.team != team or
+                                existing_record.hours_unit != hours_unit or
+                                existing_record.status != status or
                                 existing_record.business_unit_id != business_unit_id
                             ):
                                 existing_record.name = name
@@ -758,6 +803,12 @@ class NotionConnector:
                                 existing_record.business_unit = business_unit
                                 existing_record.business_unit_id = business_unit_id
                                 existing_record.record_hash = current_hash
+                                existing_record.description = description 
+                                existing_record.cost_allocation_type = cost_allocation_type 
+                                existing_record.cost_allocation = cost_allocation 
+                                existing_record.team = team 
+                                existing_record.hours_unit = hours_unit 
+                                existing_record.status = status 
                                 existing_record.save()
                                 logger.info(f"✅ Updated record: {order_id}")
                             else:
@@ -769,6 +820,13 @@ class NotionConnector:
                             NotionOrders.objects.create(
                                 order_id=order_id,
                                 name=name,
+                                
+                                description=description,
+                                team=team,
+                                cost_allocation_type=cost_allocation_type,
+                                cost_allocation=cost_allocation ,
+                                hours_unit=hours_unit,
+                                status=status,
                                 service_name=service_name,
                                 service_id=service_id,
                                 order_cost=order_cost,

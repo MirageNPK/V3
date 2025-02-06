@@ -10,11 +10,11 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write("🚀 Starting Service Report Sync...")
         try:
-            # sync_notion_orders()
+            sync_notion_orders()
             # sync_notion_service_report()
             # sync_notion_responsible_report()
             # sync_notion_bunit_report()
-            sync_notion_workload ()
+            # sync_notion_workload ()
             # sync_notion_projects()
             # sync_notion_workloadtemporary()
             self.stdout.write("✅ Sync completed successfully.")

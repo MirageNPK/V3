@@ -16,11 +16,17 @@ class NotionOrders(models.Model):
     order_id = models.CharField(max_length=50)
     responsible = models.CharField(max_length=50, blank=True, null=True)
     service_name = models.CharField(max_length=300)
+    description = models.TextField( verbose_name="Order description", blank=True, null=True)
     business_unit = models.CharField(max_length=250, default="Unknown Business Unit", blank=True, null=True)
+    team = models.CharField(max_length=250, default="Unknown team", blank=True, null=True)
+    cost_allocation_type = models.CharField(max_length=250, blank=True, null=True)
+    cost_allocation = models.CharField(max_length=250, blank=True, null=True)
     service_id = models.CharField(max_length=255)
     business_unit_id = models.IntegerField()
     order_cost = models.DecimalField(max_digits=10, decimal_places=2)
     finish_date = models.DateField()
+    hours_unit = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Plan cost", null=True, blank=True)
+    status = models.CharField(max_length=50, choices=[("New", "New"), ("In progress", "In progress"), ("Done", "Done")],null=True, blank=True, verbose_name="Status")
     record_hash = models.CharField(max_length=64, null=True, blank=True)
 
     def __str__(self):
