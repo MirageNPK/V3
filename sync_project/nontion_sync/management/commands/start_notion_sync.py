@@ -1,6 +1,6 @@
 import logging
 from django.core.management.base import BaseCommand
-from nontion_sync.tasks import sync_notion_workload, sync_notion_service_report, sync_notion_orders, sync_notion_responsible_report, sync_notion_bunit_report, sync_notion_workloadtemporary
+from nontion_sync.tasks import sync_notion_workload, sync_notion_service_report, sync_notion_orders, sync_notion_responsible_report, sync_notion_bunit_report, sync_notion_workloadtemporary, sync_notion_projects
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ class Command(BaseCommand):
             # sync_notion_responsible_report()
             # sync_notion_bunit_report()
             sync_notion_workload ()
+            # sync_notion_projects()
             # sync_notion_workloadtemporary()
             self.stdout.write("✅ Sync completed successfully.")
         except Exception as e:

@@ -16,7 +16,7 @@ class NotionOrders(models.Model):
     order_id = models.CharField(max_length=50)
     responsible = models.CharField(max_length=50, blank=True, null=True)
     service_name = models.CharField(max_length=300)
-    business_unit = models.CharField(max_length=250)
+    business_unit = models.CharField(max_length=250, default="Unknown Business Unit", blank=True, null=True)
     service_id = models.CharField(max_length=255)
     business_unit_id = models.IntegerField()
     order_cost = models.DecimalField(max_digits=10, decimal_places=2)
@@ -28,14 +28,16 @@ class NotionOrders(models.Model):
 
 class Project(models.Model):
     name = models.CharField(max_length=255, verbose_name="Name project")
+    project_id = models.CharField(max_length=50,null=True, blank=True)
     direction = models.CharField(max_length=255, verbose_name="Project direction")
-    progress = models.FloatField(verbose_name="Progress", default=0)
-    status = models.CharField(max_length=50, choices=[("active", "Active"), ("completed", "Completed"), ("on_hold", "On Hold")], verbose_name="Status")
+    progress = models.FloatField(verbose_name="Progress", null=True, blank=True)
+    status = models.CharField(max_length=50, choices=[("Backlog", "Backlog"), ("In progress", "In progress"), ("Complete", "Complete")], verbose_name="Status")
     start = models.DateField(verbose_name="Start", null=True, blank=True)
     finish_fact = models.DateField(verbose_name="Finish Fact", null=True, blank=True)
     plan_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Plan cost", null=True, blank=True)
     fact_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Fact cost", null=True, blank=True)
     project_manager = models.CharField(max_length=255, verbose_name="Project manager")
+    record_hash = models.CharField(max_length=64, null=True, blank=True)
 
     def __str__(self):
         return self.name

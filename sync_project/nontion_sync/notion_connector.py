@@ -1,7 +1,7 @@
 import time
 import logging
 from notion_client import Client
-from .models import NotionOrders
+from .models import NotionOrders,Project
 from django.db.models import Sum, F,Q
 from datetime import datetime
 from django.db.models.functions import ExtractMonth
@@ -27,6 +27,206 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("notion_sync")
+
+# Записуємо проекти з новшина в базу даних
+# синхронізуємо ордери
+class NotionProjects:
+    def __init__(self, notion_token, database_id):
+        self.notion = Client(auth=notion_token)
+        self.database_id = database_id
+
+    def calculate_record_hash(self, record):
+        """
+        Calculate a hash for the record properties to check for changes.
+        """
+        properties_str = str(record.get("properties", {}))
+        return md5(properties_str.encode("utf-8")).hexdigest()
+
+    def sync_projects(self):
+        retries = 3
+        timeout = 5
+        records_synced = 0
+        total_records = 0
+
+        for attempt in range(1, retries + 1):
+            try:
+                # Отримуємо всі записи з бази Notion
+                response = self.notion.databases.query(database_id=self.database_id)
+                notion_records = response.get("results", [])
+                total_records = len(notion_records)
+                notion_ids = set(record["id"] for record in notion_records)
+                
+                logger.info(f"Fetched {total_records} records from Notion.")
+                print(f"📊 Fetched {total_records} records.")
+
+                # Отримуємо всі локальні записи
+                local_records = Project.objects.all()
+                local_ids = set(record.project_id for record in local_records)
+
+                # Видаляємо записи, яких більше немає в Notion
+                deleted_ids = local_ids - notion_ids
+                if deleted_ids:
+                    Project.objects.filter(project_id__in=deleted_ids).delete()
+                    logger.info(f"Deleted {len(deleted_ids)} records removed from Notion.")
+
+                # Оновлення та створення записів
+                for record in notion_records:
+                    try:
+                        properties = record.get("properties", {})
+                        project_id = record.get("id", "Unknown Projekt ID")
+                        
+
+                        # Витягуємо дані з властивостей Notion
+                        name = properties.get("Name project", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Project")
+                        print (name)
+                        project_direction = (
+                            properties.get("Project direction", {})
+                            .get("select", {})
+                            .get("name", "Unknown Direction")
+                        )
+                        
+                        progress = (
+                            properties.get("Progress", {})
+                            .get("formula", {})
+                            .get("number", None)  # Значення за замовчуванням 0, якщо поле порожнє
+                        )
+                        
+                        status = (
+                            properties.get("Status", {})
+                            .get("status", {})
+                            .get("name", "Unknown Status")  # Значення за замовчуванням, якщо поле відсутнє
+                        )
+                       
+                        start_date_long = (
+                            properties.get("Start", {})
+                            .get("rollup", {})
+                            .get("date", {})
+                            .get("start", None)  # Значення за замовчуванням, якщо поле відсутнє
+                        )
+                     
+                        if start_date_long:
+                            try:
+                                # Парсимо дату з оригінального формату
+                                date_obj = datetime.fromisoformat(start_date_long)
+                                # Перетворюємо в потрібний формат
+                                start_date = date_obj.date().isoformat()  # "2025-07-01"
+                            except ValueError as e:
+                                # Якщо формат дати некоректний, можна обробити помилку
+                                print(f"Помилка формату дати: {e}")
+                                start_date = None
+                        else:
+                            start_date = None  # Якщо дата відсутня, встановлюємо None
+
+                        
+                        finish_fact_date_long = (
+                            properties.get("Finish Fact", {})
+                            .get("rollup", {})
+                            .get("date", {})
+                            .get("start", None) # Значення за замовчуванням, якщо поле відсутнє
+                        )
+                        
+                        print(f"Received Finish Fact (raw): {finish_fact_date_long}")
+
+                        if finish_fact_date_long is None or finish_fact_date_long == "":
+                            finish_fact_date = "Unknown Date"
+                        else:
+                            try:
+                                # Перевірка на формат і конвертація
+                                date_obj = datetime.fromisoformat(finish_fact_date_long)
+                                finish_fact_date = date_obj.date().isoformat()  # "2025-07-01"
+                            except ValueError as e:
+                                print(f"Помилка формату дати: {e}")
+                                finish_fact_date = "Unknown Date"
+
+                        # Логування для кінцевої дати
+                        print(f"Processed Finish Fact Date: {finish_fact_date}")
+                        plan_cost = (
+                            properties.get("Plan cost", {})
+                            .get("rollup", {})
+                            .get("number", 0.0)  # Значення за замовчуванням, якщо поле відсутнє
+                        )
+                       
+                        fact_cost = (
+                            properties.get("Fact cost", {})
+                            .get("rollup", {})
+                            .get("number", 0.0)  # Значення за замовчуванням, якщо поле відсутнє
+                        )
+                        
+                        pm_name = (
+                            properties.get("PM", {})
+                            .get("rich_text", [{}])[0]
+                            .get("text", {})
+                            .get("content", "Unknown PM")  # Значення за замовчуванням, якщо поле відсутнє
+                        )
+                        
+
+                        # Рахуємо хеш запису для перевірки змін
+                        current_hash = self.calculate_record_hash(record)
+
+                        # Перевіряємо, чи існує запис у локальній базі
+                        existing_record = Project.objects.filter(project_id=project_id).first()
+
+                        if existing_record:
+                            # Оновлюємо, якщо є зміни
+                            if (
+                                existing_record.record_hash != current_hash or
+                                existing_record.direction != project_direction or
+                                existing_record.progress != progress or
+                                existing_record.status != status or
+                                existing_record.start != start_date or
+                                existing_record.finish_fact != finish_fact_date or
+                                existing_record.plan_cost != plan_cost or
+                                existing_record.fact_cost != fact_cost or
+                                existing_record.project_manager != pm_name
+                            ):
+                                existing_record.name = name
+                                existing_record.record_hash = current_hash
+                                existing_record.direction = project_direction
+                                existing_record.progress = progress
+                                existing_record.status = status
+                                existing_record.start = start_date
+                                existing_record.finish_fact = finish_fact_date
+                                existing_record.plan_cost = plan_cost
+                                existing_record.fact_cost = fact_cost
+                                existing_record.project_manager = pm_name
+                                existing_record.record_hash = current_hash
+                                existing_record.save()
+                                logger.info(f"✅ Updated record: {project_id}")
+                            else:
+                                logger.info(f"✅ No changes for record: {project_id}")
+                                continue  # Пропускаємо, якщо змін немає
+                        else:
+                            # Створюємо новий запис
+                            Project.objects.create(
+                                
+                                name=name,
+                                project_id=project_id,
+                                direction=project_direction,
+                                progress=progress,
+                                status=status,
+                                start=start_date if start_date else None,
+                                finish_fact=finish_fact_date if finish_fact_date else None,
+                                plan_cost=plan_cost,
+                                fact_cost=fact_cost,
+                                project_manager=pm_name,
+                                record_hash=current_hash,
+                            )
+                            logger.info(f"✅ Created new record: {project_id}")
+
+                        records_synced += 1
+                    except Exception as record_error:
+                        logger.warning(f"❌ Failed to sync record: {record.get('id')}")
+                        logger.warning(record_error)
+
+                break  # Успішна синхронізація, вихід із циклу
+            except Exception as e:
+                logger.error(f"Attempt {attempt} failed. Retrying in {timeout} seconds...")
+                time.sleep(timeout)
+                timeout *= 2
+
+        logger.info(f"Sync completed. {records_synced}/{total_records} records synced.")
+        return f"Sync completed. {records_synced}/{total_records} records synced."
+
 
 
 #  формування звіту по Виконавцям ордерів       
@@ -446,7 +646,7 @@ class NotionConnector:
         """
         properties_str = str(record.get("properties", {}))
         return md5(properties_str.encode("utf-8")).hexdigest()
-
+    
     def sync_orders(self):
         retries = 3
         timeout = 5
@@ -482,6 +682,7 @@ class NotionConnector:
 
                         # Витягуємо дані з властивостей Notion
                         name = properties.get("Name service", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Service")
+                        
                         service_name = (
                             properties.get("Services and category text", {})
                             .get("rollup", {})
@@ -513,14 +714,19 @@ class NotionConnector:
                             .get("people", [{}])[0]
                             .get("name", "Unknown Responsible")
                         )
+
+
+
                         business_unit = (
                             properties.get("Business Unit", {})
                             .get("rollup", {})
                             .get("array", [{}])[0]
                             .get("rich_text", [{}])[0]
                             .get("text", {})
-                            .get("content", "Unknown Business Unit")
+                            .get("content", "Unknown Business Unit") 
                         )
+                        
+
                         business_unit_id = int(
                             properties.get("BU ID", {})
                             .get("rollup", {})
@@ -558,6 +764,7 @@ class NotionConnector:
                                 logger.info(f"✅ No changes for record: {order_id}")
                                 continue  # Пропускаємо, якщо змін немає
                         else:
+                           
                             # Створюємо новий запис
                             NotionOrders.objects.create(
                                 order_id=order_id,
@@ -661,15 +868,16 @@ class WorkloadCalculator:
 
             people = properties.get("Person", {}).get("people", [])
             person = people[0].get("name", "Unknown") if people else "Нерозподілені години"
+            
             hours = properties.get("Plan Hours", {}).get("number")
+            
             ddl_date = properties.get("Data DDL", {}).get("formula", {}).get("date", {}).get("start", None)
-
+            
             if hours is None or not ddl_date:
                 continue
 
             try:
-                parsed_date = datetime.fromisoformat(ddl_date.replace("Z", "+00:00"))
-                month_key = parsed_date.strftime("%m.%y")
+                month_key = datetime.strptime(finish_date, "%Y-%m-%d").strftime("%m.%y")
                 add_hours(person, month_key, hours)
             except ValueError as e:
                 logger.error(f"Error processing DDL date for {person}: {e}")
@@ -684,10 +892,10 @@ class WorkloadCalculator:
 
             people = properties.get("Responsible", {}).get("people", [])
             person = people[0].get("name", "Unknown") if people else "Нерозподілені години"
-            hours = properties.get("Plan hours", {}).get("number")
-            ddl_date = properties.get("DDL", {}).get("date", {}).get("start")
+            hours = properties.get("Plan hours", {}).get("number",0)
+            ddl_date = properties.get("Finish Date", {}).get("date", {}).get("start")
 
-            if hours is None or not ddl_date:
+            if hours is None or hours <= 0:
                 continue
 
             try:
