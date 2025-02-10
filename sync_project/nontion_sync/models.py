@@ -18,6 +18,7 @@ class NotionOrders(models.Model):
     service_name = models.CharField(max_length=300)
     description = models.TextField( verbose_name="Order description", blank=True, null=True)
     business_unit = models.CharField(max_length=250, default="Unknown Business Unit", blank=True, null=True)
+    business_projects = models.CharField(max_length=250, default="Unknown Business Project", blank=True, null=True)
     team = models.CharField(max_length=250, default="Unknown team", blank=True, null=True)
     cost_allocation_type = models.CharField(max_length=250, blank=True, null=True)
     cost_allocation = models.CharField(max_length=250, blank=True, null=True)

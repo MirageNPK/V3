@@ -22,7 +22,8 @@ from PyPDF2 import PdfReader
 import openai
 from telegram.ext import CallbackContext
 from django.conf import settings
-
+import tiktoken 
+import time
 BOT_TOKEN = settings.BOT_TOKEN
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -131,25 +132,27 @@ async def handle_date_input(update: Update, context):
     return ConversationHandler.END
 
 async def generate_orders_excel(orders, month, year):
+   
     df = pd.DataFrame.from_records([
         {
-            "Назва завдання": order.name,
-            "Назва замовлення": order.service_name,
+            "Назва завдання": "Назва",
+            "Назва замовлення (коротко у 1 реченні)": order.service_name,
             "Опис завдання": order.description,
-            "Назва компанії, що замовляє послугу": order.business_unit,
+            "Назва компанії, що замовляє послугу (уточни у свого СЕО)": order.business_projects,
             "Напрямок Netpeak Core": order.team,
             "Тип розподілу вартості послуг між компаніями NG": order.cost_allocation_type,
-            "Розподіл вартості послуги між компанiями NG": order.cost_allocation,
-            "Дата прийняття виконаної послуги": order.finish_date.strftime("%d.%m.%Y") if order.finish_date else "",
+            "Розподіл вартості послуги між компанiями NG (комп. А - n%, комп. В - n%, etc...)": order.cost_allocation,
+            "Дата прийняття виконаної послуги": order.finish_date.strftime("%d-%m-%Y") if order.finish_date else "",
             "Відповідальний виконавець замовлення": order.responsible,
             "Кількість замовлених послуг / годин роботи над замовленням": order.hours_unit,
-            "Статус": order.status
+            "Статус": "Завершене" if order.status == "Done" else order.status 
         } for order in orders
     ])
     
     file_path = f"orders_{month:02d}_{year}.xlsx"
     df.to_excel(file_path, index=False)
     return file_path
+
 
 async def handle_document(update: Update, context):
     document = update.message.document
@@ -159,19 +162,27 @@ async def handle_document(update: Update, context):
     download_folder = os.path.join(os.getcwd(), "downloads")
     os.makedirs(download_folder, exist_ok=True)
 
-    # Правильний шлях до файлу
+    # Шлях до файлу
     file_path = os.path.join(download_folder, document.file_name)
 
     # Завантаження файлу
     await file.download_to_drive(file_path)
 
-    # Виклик parse_document без await (бо це синхронна функція)
+    # Парсимо документ
     extracted_text = await sync_to_async(parse_document)(file_path, document.file_name)
+
+    # Якщо файл Excel/CSV, конвертуємо в JSON
+    if document.file_name.endswith(".xlsx") or document.file_name.endswith(".csv"):
+        extracted_text = f"Ось дані у форматі JSON:\n{extracted_text}"
+
+    # Обрізаємо текст, якщо він занадто великий
+    MAX_TOKENS = 15000  # Резерв залишаємо для відповіді AI
+    extracted_text = extracted_text[:MAX_TOKENS]  
 
     # Отримуємо ID користувача Telegram
     telegram_user_id = str(update.message.from_user.id)
 
-    # Перевіряємо, чи вибрано проєкт (якщо є, це ТЗ, якщо ні — навчальний матеріал)
+    # Визначаємо, чи це ТЗ чи навчальний матеріал
     if "selected_project" in context.user_data:
         project_id = context.user_data["selected_project"]
         direction = "project"
@@ -181,18 +192,30 @@ async def handle_document(update: Update, context):
 
     # Збереження в базу
     await sync_to_async(TrainingMaterial.objects.create)(
-        name=document.file_name,  # Назва документа
-        direction=direction,  # "project" або "general"
-        content=extracted_text,  # Текст
-        telegram_user_id=telegram_user_id,  # ID користувача Telegram
-        project_id=project_id,  # ID проєкту або None
+        name=document.file_name,
+        direction=direction,
+        content=extracted_text,
+        telegram_user_id=telegram_user_id,
+        project_id=project_id,
     )
 
-    # Відповідь користувачу
+    # Відправка відповіді користувачу
     if direction == "project":
         await update.message.reply_text("ТЗ збережено. AI аналізує документ...")
-        analysis = await analyze_tz_with_ai(extracted_text)
-        await update.message.reply_text(f"AI враження: {analysis}")
+        
+        # Розбиваємо великий текст на частини
+        chunk_size = 4000  # Максимальна довжина одного запиту до GPT
+        chunks = [extracted_text[i:i+chunk_size] for i in range(0, len(extracted_text), chunk_size)]
+
+        analysis_results = []
+        for chunk in chunks:
+            analysis = await analyze_tz_with_ai(chunk)
+            analysis_results.append(analysis)
+
+        # Збираємо підсумковий аналіз
+        final_analysis = "\n\n".join(analysis_results)
+        await update.message.reply_text(f"AI враження:\n{final_analysis[:4000]}")  # GPT має обмеження на довжину відповіді
+
     else:
         await update.message.reply_text("Навчальний матеріал успішно збережено! ✅")
 
@@ -213,26 +236,35 @@ def parse_document(file_path, file_name):
         return "\n".join([page.extract_text() for page in reader.pages])
     elif file_name.endswith(".xlsx") or file_name.endswith(".csv"):
         df = pd.read_excel(file_path) if file_name.endswith(".xlsx") else pd.read_csv(file_path)
-        return df.to_string()
+        return df.to_json(orient="records", force_ascii=False)
+   
     return "Невідомий формат"
 
 
-# Функція для аналізу ТЗ з розбиттям на частини
+
 async def analyze_tz_with_ai(text):
-    max_tokens = 4000  # Максимальна кількість токенів на запит до GPT
-    paragraphs = text.split("\n")  # Розбиваємо ТЗ по абзацах
+    max_tokens = 3000  # Ліміт токенів на запит
+    encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")  # Використовуємо токенізатор OpenAI
+
+    paragraphs = text.split("\n")  # Розбиваємо текст на абзаци
     parts = []
     current_part = []
+    current_tokens = 0
 
-    # Розбиваємо текст на частини, щоб кожна частина не перевищувала ліміт
     for paragraph in paragraphs:
-        current_part.append(paragraph)
-        if len(" ".join(current_part)) > max_tokens:
-            parts.append(" ".join(current_part[:-1]))  # Додаємо попередню частину
+        paragraph_tokens = len(encoding.encode(paragraph))  # Рахуємо токени в абзаці
+
+        if current_tokens + paragraph_tokens > max_tokens:
+            if current_part:
+                parts.append("\n".join(current_part))  # Зберігаємо поточну частину
             current_part = [paragraph]  # Починаємо нову частину
+            current_tokens = paragraph_tokens
+        else:
+            current_part.append(paragraph)
+            current_tokens += paragraph_tokens
 
     if current_part:
-        parts.append(" ".join(current_part))  # Додаємо останню частину
+        parts.append("\n".join(current_part))  # Додаємо останню частину
 
     # Надсилаємо частини до GPT і збираємо результати
     results = []
@@ -240,9 +272,7 @@ async def analyze_tz_with_ai(text):
         response = await ask_gpt_analysis(part)
         results.append(response)
 
-    # Об'єднуємо всі результати
     return "\n\n".join(results)
-
 
 
 async def ask_gpt_analysis(question):
@@ -332,12 +362,42 @@ async def handle_smart_goals_for_project(project_id: int, update: Update, contex
     logging.info(f"Отриманий текст ТЗ: {extracted_text[:200]}")
 
     # Формулюємо SMART-цілі
-    smart_goals = await generate_smart_goals(extracted_text)
-    logging.info(f"Згенеровані SMART-цілі: {smart_goals[:200]}")
-    
+    chunk_size = 3000  # Оптимальний розмір для GPT
+    max_chunks = 5  # Обмежимо до 5 частин, щоб уникнути зависання
+    chunks = [extracted_text[i:i+chunk_size] for i in range(0, min(len(extracted_text), chunk_size * max_chunks), chunk_size)]
+    smart_goals_parts = []
     await update.callback_query.message.reply_text(
-        f"SMART цілі для проєкту '{project.name}':\n\n{smart_goals}"
+            "Зачекайте трішечки я аналізую інформацію для написання смарт цілей"
+        )
+    for i, chunk in enumerate(chunks):
+        logging.info(f"Обробляємо частину {i+1}/{len(chunks)}...")
+        
+        start_time = time.time()
+        smart_goals = await generate_smart_goals(chunk)
+        elapsed_time = time.time() - start_time
+
+        logging.info(f"Частина {i+1} оброблена за {elapsed_time:.2f} сек.")
+        smart_goals_parts.append(smart_goals)
+
+        await asyncio.sleep(0.5)  # Додаємо паузу між запитами, щоб уникнути навантаження
+
+    final_smart_goals = "\n\n".join(smart_goals_parts)
+    logging.info(f"Згенеровані SMART-цілі (перші 200 символів): {final_smart_goals[:200]}")
+
+    await update.callback_query.message.reply_text(
+        f"SMART цілі для проєкту '{project.name}':\n\n{final_smart_goals[:4000]}"  # Ліміт у Telegram
     )
+    # for chunk in chunks:
+    #     smart_goals = await generate_smart_goals(chunk)
+    #     smart_goals_parts.append(smart_goals)
+
+    # # Об'єднуємо всі частини SMART-цілей
+    # final_smart_goals = "\n\n".join(smart_goals_parts)
+    # logging.info(f"Згенеровані SMART-цілі (перші 200 символів): {final_smart_goals[:200]}")
+
+    # await update.callback_query.message.reply_text(
+    #     f"SMART цілі для проєкту '{project.name}':\n\n{final_smart_goals[:4000]}"  # GPT має ліміт на довжину відповіді
+    # )
 
 # Функція для генерації SMART цілей через GPT
 async def generate_smart_goals(tz_text):

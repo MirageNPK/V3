@@ -40,8 +40,9 @@ class NotionProjects:
         Calculate a hash for the record properties to check for changes.
         """
         properties_str = str(record.get("properties", {}))
+        
         return md5(properties_str.encode("utf-8")).hexdigest()
-
+        
     def sync_projects(self):
         retries = 3
         timeout = 5
@@ -49,13 +50,13 @@ class NotionProjects:
         total_records = 0
 
         for attempt in range(1, retries + 1):
+            
             try:
                 # Отримуємо всі записи з бази Notion
                 response = self.notion.databases.query(database_id=self.database_id)
                 notion_records = response.get("results", [])
                 total_records = len(notion_records)
                 notion_ids = set(record["id"] for record in notion_records)
-                
                 logger.info(f"Fetched {total_records} records from Notion.")
                 print(f"📊 Fetched {total_records} records.")
 
@@ -660,6 +661,7 @@ class NotionConnector:
                 notion_records = response.get("results", [])
                 total_records = len(notion_records)
                 notion_ids = set(record["id"] for record in notion_records)
+                
               
 
                 logger.info(f"Fetched {total_records} records from Notion.")
@@ -728,6 +730,16 @@ class NotionConnector:
                             .get("content", "Unknown Business Unit") 
                         )
 
+                        business_projects = (
+                            properties.get("Busines project", {})
+                            .get("rollup", {})
+                            .get("array", [{}])[0]
+                            .get("title", [{}])[0]
+                            .get("text", {})
+                            .get("content", "Не вказано")
+                            )
+                        
+
                         description = ( properties.get("Essence or description", {})
                             .get("rich_text", [{}])[0].get("text", {})
                             .get("content", "Опис відсутній")
@@ -790,6 +802,7 @@ class NotionConnector:
                                 existing_record.cost_allocation_type != cost_allocation_type or
                                 existing_record.cost_allocation != cost_allocation or
                                 existing_record.team != team or
+                                existing_record.business_projects != business_projects or
                                 existing_record.hours_unit != hours_unit or
                                 existing_record.status != status or
                                 existing_record.business_unit_id != business_unit_id
@@ -805,6 +818,7 @@ class NotionConnector:
                                 existing_record.record_hash = current_hash
                                 existing_record.description = description 
                                 existing_record.cost_allocation_type = cost_allocation_type 
+                                existing_record.business_projects = business_projects
                                 existing_record.cost_allocation = cost_allocation 
                                 existing_record.team = team 
                                 existing_record.hours_unit = hours_unit 
@@ -833,6 +847,7 @@ class NotionConnector:
                                 finish_date=finish_date,
                                 responsible=responsible,
                                 business_unit=business_unit,
+                                business_projects=business_projects,
                                 business_unit_id=business_unit_id,
                                 record_hash=current_hash,
                             )

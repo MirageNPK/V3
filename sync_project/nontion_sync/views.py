@@ -15,7 +15,7 @@ def run_task(request):
     if request.method in ["POST", "GET"]:
         try:
             sync_notion_orders()
-            sync_notion_workloadtemporary()
+            # sync_notion_workloadtemporary()
             sync_notion_service_report()
             sync_notion_responsible_report()
             sync_notion_bunit_report()
