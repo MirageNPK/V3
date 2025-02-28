@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import NotionDbConfig, NotionOrders, Project, Parent, Task
+from .models import NotionDbConfig, NotionOrders, Project, Parent, Task, AIgenTask
 
 @admin.register(NotionDbConfig)
 class ConfigAdmin(admin.ModelAdmin):
@@ -11,7 +11,7 @@ class ConfigAdmin(admin.ModelAdmin):
 
 @admin.register(Project)
 class ConfigAdmin(admin.ModelAdmin):
-    list_display = ["name", "direction", "start", "finish_fact","status"]
+    list_display = ["name","id", "direction", "start", "finish_fact","status"]
 
 @admin.register(Parent)
 class ConfigAdmin(admin.ModelAdmin):
@@ -20,3 +20,7 @@ class ConfigAdmin(admin.ModelAdmin):
 @admin.register(Task)
 class ConfigAdmin(admin.ModelAdmin):
     list_display = ["name", "project", "start", "finish","person","status"]
+
+@admin.register(AIgenTask)
+class ConfigAdmin(admin.ModelAdmin):
+    list_display = ["name", "project", "person","status"]

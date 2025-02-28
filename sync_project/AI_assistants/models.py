@@ -33,3 +33,14 @@ class TrainingMaterial(models.Model):
         # Call the clean method to validate before saving
         self.clean()
         super().save(*args, **kwargs)
+
+
+class ChatHistory(models.Model):
+    user_id = models.BigIntegerField()  # ID користувача в Telegram
+    session_id = models.CharField(max_length=255)  # ID сесії для групування діалогу
+    message = models.TextField()  # Повідомлення користувача
+    response = models.TextField()  # Відповідь AI
+    timestamp = models.DateTimeField(auto_now_add=True)  # Час повідомлення
+
+    def __str__(self):
+        return f"User {self.user_id}: {self.message[:50]}..."

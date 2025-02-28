@@ -5,9 +5,33 @@ from .models import NotionDbConfig
 from .notion_connector import (
     NotionConnector, NotionServiceReportConnector,
     NotionResponsibleReportConnector, NotionBuReportConnector, 
-    WorkloadCalculator, NotionWorkloadSync, NotionWorkloadtempSync, WorkloadTempCalculator, NotionProjects
+    WorkloadCalculator, NotionWorkloadSync, NotionWorkloadtempSync, WorkloadTempCalculator, NotionProjects, NotionTasks
 )
 logger = logging.getLogger(__name__)
+
+@app.task
+def sync_notion_tasks(*args, **kwargs):
+    configs = NotionDbConfig.objects.filter(is_active=True,database_id="1313a17e5d7f81be9daec933d18a74ed")
+    if not configs.exists():
+        logger.error("No active NotionDbConfig records found.")
+        print("❌ No active configurations.")
+        return
+
+    for config in configs:
+        logger.info(f"Processing NotionDbConfig: {config.name}")
+        print(f"🔄 Syncing tasks data from database: {config.database_id}")
+
+        try:
+            connector = NotionTasks(
+                notion_token=config.notion_token,
+                database_id=config.database_id
+            )
+            result = connector.sync_tasks()
+            logger.info(f"✅ Sync result for {config.database_id}: {result}")
+            print(f"✅ {result}")
+        except Exception as e:
+            logger.error(f"Error syncing database {config.database_id}: {str(e)}")
+            print(f"❌ Error: {str(e)}")
 
 @app.task
 def sync_notion_projects(*args, **kwargs):

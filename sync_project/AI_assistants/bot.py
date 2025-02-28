@@ -1,7 +1,9 @@
+from multiprocessing import context
 import sys
 import os
 import logging
 import asyncio
+from urllib import response
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Document,ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 # Додаємо кореневу директорію проекту до Python path
@@ -10,8 +12,8 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sync_project.settings')
 import django
 
 django.setup()
-from AI_assistants.models import TrainingMaterial
-from nontion_sync.models import Project, NotionOrders
+from AI_assistants.models import TrainingMaterial, ChatHistory
+from nontion_sync.models import Project, NotionOrders, AIgenTask, Parent
 from django.db import models
 from django.db.models import QuerySet
 from asgiref.sync import sync_to_async
@@ -24,21 +26,101 @@ from telegram.ext import CallbackContext
 from django.conf import settings
 import tiktoken 
 import time
+import uuid
+import re
+from django.db import transaction
+from typing import List, Dict, Tuple, Any
+import hashlib
+
+CHUNK_SIZE = 3000
+MAX_CHUNKS = 5
 BOT_TOKEN = settings.BOT_TOKEN
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
+user_requests_channel_post_reply = {}
+BOT_USERNAME = "@MiragePandA_bot"  
+AI_CONSULT_MODE = set()
+async def handle_mention(update: Update, context: CallbackContext):
+    """Обробляє повідомлення, якщо бот згадано в каналі."""
+    # Перевірка, чи це повідомлення з каналу
+    if update.message:
+        text = update.message.text
+        bot_username = (await context.bot.get_me()).username
 
-async def start(update: Update, context: CallbackContext):
+        if bot_username in text:
+            # Якщо згадано бота, отримуємо текст без згадки
+            user_question = text.replace(f"@{bot_username}", "").strip()
+
+            # Якщо питання порожнє (тільки згадка бота)
+            if not user_question:
+                # Викликаємо команду /start в каналі (для каналу)
+                await send_menu_to_channel(update, context)
+                return  # Завершуємо обробку, щоб не відправляти ще одну відповідь
+
+            # Якщо є текст після згадки бота, обробляємо запит до GPT
+            response = await ask_gpt_analysis(user_question)
+            # Відправка відповіді в канал
+            await update.message.reply_text(response)
+
+async def send_menu_to_channel(update: Update, context: CallbackContext):
+    """Відправляє меню в канал."""
     keyboard = [
         [InlineKeyboardButton("📄 Завантажити ТЗ", callback_data="upload_tz")],
         [InlineKeyboardButton("📚 Завантажити навч. мат.", callback_data="upload_material")],
         [InlineKeyboardButton("🤖 Консультація з AI", callback_data="consult_ai")],
         [InlineKeyboardButton("🎯 Написати SMART-цілі", callback_data="smart_goals")],
+        # [InlineKeyboardButton("📝 Згенерувати таски", callback_data="generate_tasks")],
         [InlineKeyboardButton("📂 Сформувати файл з ордерами", callback_data="generate_orders_file")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Привіт! Що вам потрібно?", reply_markup=reply_markup)
+
+    try:
+        await context.bot.send_message(
+            chat_id=update.message.chat.id,
+            text="Привіт! Що вам потрібно?",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logging.error(f"Помилка при відправці меню в канал: {e}")
+
+async def start(update: Update, context: CallbackContext):
+    """Відправляє меню кнопок у приватному чаті або в каналі при натисканні 'Почати'."""
+    keyboard = [
+        [InlineKeyboardButton("📄 Завантажити ТЗ", callback_data="upload_tz")],
+        [InlineKeyboardButton("📚 Завантажити навч. мат.", callback_data="upload_material")],
+        [InlineKeyboardButton("🤖 Консультація з AI", callback_data="consult_ai")],
+        [InlineKeyboardButton("🎯 Написати SMART-цілі", callback_data="smart_goals")],
+        [InlineKeyboardButton("📝 Згенерувати таски", callback_data="generate_tasks")],
+        [InlineKeyboardButton("📂 Сформувати файл з ордерами", callback_data="generate_orders_file")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.message:
+        await update.message.reply_text("Привіт! Що вам потрібно?", reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.edit_text("Що ви хочете зробити?", reply_markup=reply_markup)
+
+async def handle_mention(update: Update, context: CallbackContext):
+    """Обробляє повідомлення, якщо бот згадано."""
+    # Перевірка на тип оновлення: чи є повідомлення з текстом
+    if update.message:
+        text = update.message.text
+        bot_username = (await context.bot.get_me()).username
+
+        if bot_username in text:
+            # Якщо згадано бота, отримуємо текст без згадки
+            user_question = text.replace(f"@{bot_username}", "").strip()
+
+            # Якщо питання порожнє (тільки згадка бота)
+            if not user_question:
+                # Викликаємо команду /start (для приватних чатів)
+                await start(update, context)
+            else:
+                # Запит до GPT
+                response = await ask_gpt_analysis(user_question)
+                # Відправка відповіді
+                await update.message.reply_text(response)
 
 
 async def get_projects():
@@ -48,6 +130,8 @@ async def get_projects():
 # Визначте стани для ConversationHandler
 WAITING_PROJECT_NAME = 1
 WAITING_FOR_DATE = 1
+WAITING_FOR_TASKS = 1
+
 
 async def create_new_project(update: Update, context: CallbackContext):
     await update.callback_query.answer()
@@ -70,10 +154,28 @@ async def handle_new_project_name(update: Update, context: CallbackContext):
 
 async def button_handler(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    user_id = query.from_user.id  # Зберігаємо id користувача
+
+    # Активуємо відповіді на пости для користувача
+    if query.data == "activate_channel_reply":
+        user_requests_channel_post_reply[user_id] = True
+        await query.answer()
+        await query.edit_message_text("Відповіді на пости в каналі активовано! Тепер бот може реагувати на ваші пости.")
     
-    if query.data == "upload_tz":
-        # await query.message.reply_text("Введіть назву проєкту або виберіть зі списку.")
+    elif query.data == "bot_help_in_channel":
+        # Інші варіанти кнопок для допомоги в каналі
+        keyboard = [
+            [InlineKeyboardButton("📄 Завантажити ТЗ", callback_data="upload_tz")],
+            [InlineKeyboardButton("📚 Завантажити навч. мат.", callback_data="upload_material")],
+            [InlineKeyboardButton("🤖 Консультація з AI", callback_data="consult_ai")],
+            [InlineKeyboardButton("🎯 Написати SMART-цілі", callback_data="smart_goals")],
+            [InlineKeyboardButton("📝 Згенерувати таски", callback_data="generate_tasks")],
+            [InlineKeyboardButton("📂 Сформувати файл з ордерами", callback_data="generate_orders_file")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text("Виберіть дію, яку ви хочете виконати:", reply_markup=reply_markup)
+
+    elif query.data == "upload_tz":
         projects = await get_projects()
         keyboard = [[InlineKeyboardButton(project.name, callback_data=f"project_{project.id}")] for project in projects]
         keyboard.append([InlineKeyboardButton("🆕 Створити новий проєкт", callback_data="create_new_project")])
@@ -98,10 +200,43 @@ async def button_handler(update: Update, context):
         keyboard = [[InlineKeyboardButton(project.name, callback_data=f"smart_goals_project_{project.id}")] for project in projects]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.reply_text("Виберіть проект для створення SMART-цілей:", reply_markup=reply_markup)
+
     elif query.data == "generate_orders_file":
         await query.message.reply_text("Введіть місяць і рік у форматі MM.YYYY (наприклад, 01.2025):")
         return WAITING_FOR_DATE
+        return WAITING_FOR_DATE
+    
+    elif query.data == "generate_tasks":
+        logging.info("Користувач натиснув кнопку 'Згенерувати таски'")
+        projects = await get_projects()
+        logging.info(f"Знайдено {len(projects)} проектів")
+        if not projects:
+            await query.message.reply_text("Немає доступних проектів.")
+            return
+    
+        keyboard = [[InlineKeyboardButton(project.name, callback_data=f"tasks_project_{project.id}")] for project in projects]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+    
+        logging.info("Повідомлення з вибором проекту відправлено")
+        await query.message.reply_text("Виберіть проект для генерації тасок:", reply_markup=reply_markup)
+    elif query.data.startswith("tasks_project_"):
+        logging.info(f"Отримано callback: {query.data}")  # Має вивести tasks_project_123
+        project_id = int(query.data.split("_")[-1])
+        logging.info(f"Обраний проект: {project_id}")
 
+        # Додати перевірку чи є ТЗ
+        if await project_has_tz(project_id):
+            logging.info("Проект має ТЗ, починаємо генерацію тасок")
+            await handle_tasks_project(project_id, update, context)  # Замінити на правильну функцію
+        else:
+            logging.info("Цей проект не має ТЗ")
+            await query.answer()
+            await query.message.reply_text("Цей проект не має технічного завдання (ТЗ), тому не можна створити задачі.")
+
+    
+
+
+# Формування Ексель файла з ордерами
 async def handle_date_input(update: Update, context):
     user_input = update.message.text.strip()
 
@@ -121,7 +256,7 @@ async def handle_date_input(update: Update, context):
         return WAITING_FOR_DATE
 
     # Пошук ордерів за вказаний місяць та рік
-    orders = await sync_to_async(list)(NotionOrders.objects.filter(finish_date__year=year, finish_date__month=month))
+    orders = await sync_to_async(list)(NotionOrders.objects.filter(status="Done", finish_date__year=year, finish_date__month=month ))
     if not orders:
         await update.message.reply_text("❌ Даних за цей період немає.")
         return ConversationHandler.END
@@ -137,15 +272,23 @@ async def generate_orders_excel(orders, month, year):
         {
             "Назва завдання": "Назва",
             "Назва замовлення (коротко у 1 реченні)": order.service_name,
-            "Опис завдання": order.description,
-            "Назва компанії, що замовляє послугу (уточни у свого СЕО)": order.business_projects,
+            "Опис завдання": f"{order.description + ',' or ''} {order.url_docs or ''}".strip(),
+            "Назва компанії, що замовляє послугу (уточни у свого СЕО)": order.business_project_pf,
             "Напрямок Netpeak Core": order.team,
             "Тип розподілу вартості послуг між компаніями NG": order.cost_allocation_type,
             "Розподіл вартості послуги між компанiями NG (комп. А - n%, комп. В - n%, etc...)": order.cost_allocation,
+            "Дата розміщення замовлення": order.order_date.strftime("%d-%m-%Y") if order.finish_date else "",
             "Дата прийняття виконаної послуги": order.finish_date.strftime("%d-%m-%Y") if order.finish_date else "",
-            "Відповідальний виконавець замовлення": order.responsible,
+            "Відповідальний виконавець замовлення": order.get_responsible_pf_display(),
             "Кількість замовлених послуг / годин роботи над замовленням": order.hours_unit,
-            "Статус": "Завершене" if order.status == "Done" else order.status 
+            "Статус": "Завершене" if order.status == "Done" else order.status,
+            "ID послуги": order.service_id,
+            "Назва послуги": order.service_name,
+            "Категорія послуги": order.category,
+            "Вартість замовлення": order.order_cost,
+            "Посилання на Docs": order.url_docs,
+            "ID  замовлення з Notion": order.order_id,
+            "ID  замовлення з Notion номер": order.order_id_num
         } for order in orders
     ])
     
@@ -202,7 +345,8 @@ async def handle_document(update: Update, context):
     # Відправка відповіді користувачу
     if direction == "project":
         await update.message.reply_text("ТЗ збережено. AI аналізує документ...")
-        
+        chat_id = update.effective_chat.id
+        AI_CONSULT_MODE.add(chat_id)
         # Розбиваємо великий текст на частини
         chunk_size = 4000  # Максимальна довжина одного запиту до GPT
         chunks = [extracted_text[i:i+chunk_size] for i in range(0, len(extracted_text), chunk_size)]
@@ -214,6 +358,7 @@ async def handle_document(update: Update, context):
 
         # Збираємо підсумковий аналіз
         final_analysis = "\n\n".join(analysis_results)
+        await save_chat_history(chat_id, analysis_results, final_analysis)
         await update.message.reply_text(f"AI враження:\n{final_analysis[:4000]}")  # GPT має обмеження на довжину відповіді
 
     else:
@@ -221,11 +366,48 @@ async def handle_document(update: Update, context):
 
 
 
-async def handle_ai_consult(update: Update, context):
-    user_question = update.message.text
-    response = await ask_gpt_analysis(user_question)
-    await update.message.reply_text(response)
+async def enable_ai_consult(update: Update, context: CallbackContext):
+    """Активує режим консультації AI після натискання кнопки."""
+    chat_id = update.effective_chat.id
+    AI_CONSULT_MODE.add(chat_id)  # Додаємо чат у список консультації
 
+    await update.callback_query.message.reply_text(
+        "✅ Ви активували режим консультації AI.\n\n"
+        "Напишіть запит, і я відповім вам."
+    )
+
+async def handle_ai_consult(update: Update, context: CallbackContext):
+    """Обробляє повідомлення користувача для AI консультації."""
+    chat_id = update.effective_chat.id
+    user_text = update.message.text if update.message else update.channel_post.text
+
+    # Автоматично дозволяємо відповідати у приватних чатах
+    if update.effective_chat.type in ["private", "group", "supergroup"]:
+        AI_CONSULT_MODE.add(chat_id)
+
+    # Отримуємо останню історію повідомлень (обмеження в 10 останніх)
+    context_history = await get_recent_context(chat_id, limit=10)  # <-- Додали limit
+
+    # Перевіряємо довжину контексту, щоб не перевищувати ліміт
+    if len(context_history) > 5000:  # Орієнтовний ліміт (регулюється)
+        context_history = context_history[-4000:]  # Обрізаємо до останніх 4000 символів
+
+    # Формуємо запит із контекстом
+    full_prompt = f"{context_history}\nUser: {user_text}\nAI:"
+
+    # Якщо чат у режимі консультації — відповідаємо без перевірки згадки
+    if chat_id in AI_CONSULT_MODE:
+        response = await ask_gpt_analysis(full_prompt)
+        await save_chat_history(chat_id, user_text, response)
+        await update.effective_message.reply_text(response)
+        return
+
+    # Перевіряємо, чи згадано бота
+    bot_username = (await context.bot.get_me()).username
+    if f"@{bot_username}" in user_text:
+        response = await ask_gpt_analysis(full_prompt)
+        await save_chat_history(chat_id, user_text, response)
+        await update.effective_message.reply_text(response)
 
 def parse_document(file_path, file_name):
     if file_name.endswith(".docx"):
@@ -308,6 +490,7 @@ def get_project_by_id(project_id: int):
 
 # Функція для перевірки наявності ТЗ для проекту
 async def project_has_tz(project_id: int) -> bool:
+    logging.info(f"Отримуємо ТЗ для проекту {project_id}")
     tz_list = await get_tz_for_project(project_id)
     return len(tz_list) > 0
 
@@ -345,6 +528,7 @@ async def smart_goals_handler(update: Update, context: CallbackContext):
 
 # Функція для обробки SMART цілей для вибраного проекту
 async def handle_smart_goals_for_project(project_id: int, update: Update, context: CallbackContext):
+    chat_id = update.effective_chat.id
     project = await get_project_by_id(project_id)
     if not project:
         await update.callback_query.message.reply_text("Проект не знайдений.")
@@ -383,21 +567,12 @@ async def handle_smart_goals_for_project(project_id: int, update: Update, contex
 
     final_smart_goals = "\n\n".join(smart_goals_parts)
     logging.info(f"Згенеровані SMART-цілі (перші 200 символів): {final_smart_goals[:200]}")
-
+    
+    await save_chat_history(chat_id, extracted_text, final_smart_goals)
     await update.callback_query.message.reply_text(
         f"SMART цілі для проєкту '{project.name}':\n\n{final_smart_goals[:4000]}"  # Ліміт у Telegram
     )
-    # for chunk in chunks:
-    #     smart_goals = await generate_smart_goals(chunk)
-    #     smart_goals_parts.append(smart_goals)
-
-    # # Об'єднуємо всі частини SMART-цілей
-    # final_smart_goals = "\n\n".join(smart_goals_parts)
-    # logging.info(f"Згенеровані SMART-цілі (перші 200 символів): {final_smart_goals[:200]}")
-
-    # await update.callback_query.message.reply_text(
-    #     f"SMART цілі для проєкту '{project.name}':\n\n{final_smart_goals[:4000]}"  # GPT має ліміт на довжину відповіді
-    # )
+    
 
 # Функція для генерації SMART цілей через GPT
 async def generate_smart_goals(tz_text):
@@ -407,7 +582,7 @@ async def generate_smart_goals(tz_text):
     ТЗ: {tz_text}
 
     Поясни, які конкретні SMART цілі можна визначити з цього ТЗ. 
-    Цілі повинні бути:
+    Кожна окрема SMART ціль повинна вкльчати в себе:
     - Specific (конкретні)
     - Measurable (вимірні)
     - Achievable (досяжні)
@@ -436,6 +611,211 @@ async def ask_gpt(prompt: str) -> str:
         return "Виникла помилка при запиті до GPT. Спробуйте ще раз."
 
 
+# Збереження контексту розмови з АІ асистентом
+async def save_chat_history(user_id, user_message, ai_response):
+    session_id = str(uuid.uuid4())  # Генеруємо унікальний ID для сесії (можна групувати за часом)
+    
+    await sync_to_async(ChatHistory.objects.create)(
+        user_id=user_id,
+        session_id=session_id,
+        message=user_message,
+        response=ai_response
+    )
+
+def get_chat_history(user_id, limit=10):
+    return ChatHistory.objects.filter(user_id=user_id).order_by('-timestamp')[:limit]
+
+async def get_recent_context(user_id, limit=5):
+     """Асинхронно отримує останні повідомлення користувача для контексту AI."""
+     history = await sync_to_async(
+        lambda: list(ChatHistory.objects.filter(user_id=user_id).order_by('-timestamp')[:limit])
+    )()
+     context = "\n".join([f"User: {h.message}\nAI: {h.response}" for h in reversed(history)])
+     return context
+
+
+
+# Генерація АІ тасок для проектів по ТЗ
+
+async def task_handler(update: Update, context: CallbackContext):
+    logging.info(f"Обробляємо задачі для проекту {project_id}")
+    if update.callback_query:
+        user_id = update.callback_query.from_user.id
+        callback_data = update.callback_query.data
+        logging.info(f"Callback data отримано: {callback_data}")
+
+        if callback_data.startswith('tasks_project_'):
+            project_id = int(callback_data.split('_')[-1])
+
+            if await project_has_tz(project_id):
+                await update.callback_query.answer()
+                await handle_tasks_project(project_id, update, context)
+            else:
+                await update.callback_query.answer()
+                await context.bot.send_message(
+                    user_id, 
+                    "Цей проект не має технічного завдання (ТЗ), тому не можна створити SMART цілі."
+                )
+    
+    elif update.message:
+        user_id = update.message.from_user.id
+        projects = await sync_to_async(list)(Project.objects.all())
+        keyboard = [
+            [InlineKeyboardButton(project.name, callback_data=f"tasks_project_{project.id}")] 
+            for project in projects
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "Виберіть проект для написання Tasks and parent tasks:", 
+            reply_markup=reply_markup
+        )
+
+# Функція для обробки tasks для вибраного проекту
+async def parse_and_save_tasks(project_id, tasks_text):
+    """Асинхронна функція для збереження парентів та тасок"""
+    await sync_to_async(_parse_and_save_tasks_sync)(project_id, tasks_text)
+
+def _parse_and_save_tasks_sync(project_id, tasks_text):
+    """Синхронна функція для збереження парентів та тасок"""
+    with transaction.atomic():
+        project = Project.objects.get(id=project_id)  # Отримуємо проєкт
+
+        parent_blocks = re.split(r"\*\*Parent Task \d+:\*\*", tasks_text)[1:]
+
+        for parent_text in parent_blocks:
+            # Видаляємо зайві пробіли та переносимо на новий рядок
+            parent_text = parent_text.strip()
+
+            # Беремо перший рядок як назву парент таски
+            lines = parent_text.split("\n")
+            parent_title = lines[0].strip("* ").strip()
+
+            # Зберігаємо парент у базу
+            parent_task = Parent.objects.create(name=parent_title, project=project)
+
+            # Витягуємо таски для цього парента
+            task_matches = re.findall(r"- Task \d+: (.+?), (\d+) годин, #(\d+)", parent_text)
+
+            for task_description, hours, task_id in task_matches:
+                AIgenTask.objects.create(
+                    name=task_description.strip(),  # Назва таски
+                    parent_task=parent_task,  # Прив'язуємо до парента
+                    project=project,  # Прив'язуємо до проєкту
+                    hours_plan=float(hours),  # Якщо потрібно, можна парсити години окремо
+                    status="Backlog",  # За замовчуванням статус
+                    plan_cost=None,  # Якщо потрібно, можна парсити ціну окремо
+                    order=int(task_id),  # Порядковий номер
+                )
+
+async def handle_tasks_project(project_id: int, update: Update, context: CallbackContext):
+    chat_id = update.effective_chat.id
+    project = await get_project_by_id(project_id)
+    if not project:
+        await update.callback_query.message.reply_text("Проект не знайдений.")
+        return
+
+    tz_list = await get_tz_for_project(project_id)
+    if not tz_list:
+        await update.callback_query.message.reply_text(
+            "Для цього проєкту немає ТЗ. Завантажте ТЗ для продовження."
+        )
+        return
+
+    # Об'єднуємо текст з кількох ТЗ
+    extracted_text = "\n\n".join([tz.content for tz in tz_list])
+    logging.info(f"Отриманий текст ТЗ: {extracted_text[:200]}")
+
+    # Формулюємо tasks
+    chunk_size = 4000  # Оптимальний розмір для GPT
+    max_chunks = 5  # Обмежимо до 5 частин, щоб уникнути зависання
+    chunks = [extracted_text[i:i+chunk_size] for i in range(0, min(len(extracted_text), chunk_size * max_chunks), chunk_size)]
+    tasks_parts = []
+    await update.callback_query.message.reply_text(
+            "Зачекайте трішечки я аналізую інформацію для написання Тасок"
+        )
+    for i, chunk in enumerate(chunks):
+        logging.info(f"Обробляємо частину {i+1}/{len(chunks)}...")
+        
+        start_time = time.time()
+        tasks = await generate_tasks(chunk)
+        elapsed_time = time.time() - start_time
+
+        logging.info(f"Частина {i+1} оброблена за {elapsed_time:.2f} сек.")
+        tasks_parts.append(tasks)
+
+        await asyncio.sleep(0.5)  # Додаємо паузу між запитами, щоб уникнути навантаження
+
+    final_tasks = "\n\n".join(tasks_parts)
+    logging.info(f"Згенеровані таски (перші 200 символів): {final_tasks[:200]}")
+    
+    # await save_chat_history(chat_id, extracted_text, final_tasks)
+    await parse_and_save_tasks(project_id, final_tasks)  # Збереження в базу
+    await send_tasks_in_parts(chat_id, project.name, final_tasks, context)
+    # await update.callback_query.message.reply_text(
+    #     f"Ось таски для проєкту '{project.name}':\n\n{final_tasks[:4000]}"  # Ліміт у Telegram
+    # )
+
+async def send_tasks_in_parts(chat_id, project_name, tasks_text, context):
+    """Розбиває список тасок на Parent Tasks і надсилає їх у Telegram"""
+    
+    parent_tasks = re.split(r"\*\*Parent Task \d+:", tasks_text)[1:]  # Розділяємо Parent Tasks
+    logging.info(f"Кількість Parent Tasks: {len(parent_tasks)}")
+
+    for idx, parent in enumerate(parent_tasks):
+        message = f"**Parent Task {idx+1}:** {parent.strip()}"
+
+        # Розбиваємо на частини, якщо довжина більше 4000 символів
+        for part in [message[i:i+4000] for i in range(0, len(message), 4000)]:
+            await context.bot.send_message(chat_id, part)
+            await asyncio.sleep(1)  # Щоб уникнути ліміту запитів
+    
+
+# Функція для генерації tasks
+async def generate_tasks(tz_text):
+    prompt = f"""
+    Ось технічне завдання (ТЗ) для проєкту. Виділи основні великі завдання (Parent Tasks) та дрібні кроки для кожного великого завдання (Tasks).
+    Мінімальна кількість Parent Tasks 7 штук, максимальна 12 шт.
+    Мінімальна кількість Tasks 150 штук. 
+
+    порядковий номер таски в кінці назви таски є обовязковий так як планова кількість годин на виконання
+
+    🔹 Формат відповіді:
+    **Parent Task 1:** Назва великого завдання
+        - Task 1: Опис, планова кількість годин на виконання, Порядковий номер таски
+        - Task 2: Опис, планова кількість годин на виконання, Порядковий номер таски
+        - Task N: Опис, Опис, планова кількість годин на виконання, Порядковий номер таски
+
+        **Parent Task 2:** Назва великого завдання
+        - Task 1: Опис, Опис, планова кількість годин на виконання, Порядковий номер таски
+        - Task 2: Опис, Опис, планова кількість годин на виконання, Порядковий номер таски
+        - Task N: Опис, Опис, планова кількість годин на виконання, Порядковий номер таски
+
+    ТЗ: {tz_text}
+
+    """
+    smart_goals_response = await ask_gpt_tasks(prompt)
+    return smart_goals_response
+
+# Функція для запиту до GPT
+async def ask_gpt_tasks(prompt: str) -> str:
+    openai.api_key = OPENAI_API_KEY
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Ти - експерт з формування проектних тасок і парентів для них на основі технічних завдань. Мінімум тасок 150 штук"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=4000
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logging.error(f"Error with GPT request: {e}")
+        return "Виникла помилка при запиті до GPT. Спробуйте ще раз."
+
+
+
 def main():
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(create_new_project, pattern="^create_new_project$")],
@@ -451,20 +831,32 @@ def main():
     },
     fallbacks=[],
 )
+    
+
 
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(conv_handler)
     application.add_handler(conv_handler_btn)
+    # application.add_handler(conv_handler_tasks)
     application.add_handler(CommandHandler("start", start))
     # application.add_handler(CallbackQueryHandler(button_handler, pattern="^(?!smart_goals_project_).*"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_consult))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(smart_goals_handler, pattern="^smart_goals_project_"))
     application.add_handler(CallbackQueryHandler(handle_smart_goals_for_project, pattern="^smart_goals_project_"))
+    application.add_handler(CallbackQueryHandler(task_handler, pattern="^tasks_project_"))
+    
+    
+    
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & ~filters.Regex("^.*$"), 
         handle_ai_consult
     ))
+    application.add_handler(CallbackQueryHandler(enable_ai_consult, pattern="^consult_ai$"))
+    # Обробник тільки згадок бота
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"{BOT_USERNAME}"), handle_mention))
+    # Обробник постів у каналі
+    application.add_handler(MessageHandler(filters.ChatType.CHANNEL, send_menu_to_channel))
     application.run_polling()
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import time
 import logging
 from notion_client import Client
-from .models import NotionOrders,Project
+from .models import NotionOrders,Project, Task
 from django.db.models import Sum, F,Q
 from datetime import datetime
 from django.db.models.functions import ExtractMonth
@@ -28,8 +28,121 @@ logging.basicConfig(
 
 logger = logging.getLogger("notion_sync")
 
+# Записуємо таски з новшина в базу даних проги
+class NotionTasks:
+    def __init__(self, notion_token, database_id):
+        self.notion = Client(auth=notion_token)
+        self.database_id = database_id
+
+    def calculate_record_hash(self, record):
+        """Обчислення хешу для перевірки змін."""
+        properties_str = str(record)
+        return md5(properties_str.encode("utf-8")).hexdigest()
+
+    def fetch_notion_records(self):
+        """Отримання всіх записів із Notion із правильною пагінацією."""
+        all_notion_records = []
+        start_cursor = None
+
+        while True:
+            try:
+                query_params = {"database_id": self.database_id}
+                if start_cursor:
+                    query_params["start_cursor"] = start_cursor
+
+                response = self.notion.databases.query(**query_params)
+                notion_records = response.get("results", [])
+                all_notion_records.extend(notion_records)
+
+                start_cursor = response.get("next_cursor")
+                if not start_cursor:
+                    break
+
+                time.sleep(1)  # Уникаємо rate limit
+
+            except Exception as e:
+                logger.error(f"❌ Error fetching Notion records: {e}")
+                break
+
+        logger.info(f"Fetched {len(all_notion_records)} records from Notion.")
+        return all_notion_records
+
+    def sync_tasks(self):
+        """Синхронізація записів із Notion до локальної бази."""
+        all_notion_records = self.fetch_notion_records()
+        if not all_notion_records:
+            logger.info("No records fetched from Notion.")
+            return
+
+        # Отримуємо всі локальні записи
+        local_records = Task.objects.all()
+        local_tasks_map = {task.task_id: task for task in local_records}
+
+        notion_task_ids = set()
+        new_tasks = []
+        updated_tasks = []
+
+        for record in all_notion_records:
+            try:
+                properties = record.get("properties", {})
+                task_id = record.get("id")
+
+                task_data = {
+                    "task_id": task_id,
+                    "name": properties.get("Task Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Unnamed Project"),
+                    "hours_plan": properties.get("Hours plan", {}).get("number", 0),
+                    "hours_fact": properties.get("Hours fact", {}).get("number", 0),
+                    "start": properties.get("Start", {}).get("date", {}).get("start", None),
+                    "finish": properties.get("Finish", {}).get("date", {}).get("start", None),
+                    "person": properties.get("Person", {}).get("people", [{}])[0].get("name", "Unknown Person") if properties.get("Person", {}).get("people") else "Unknown Person",
+                    "status": properties.get("Status", {}).get("status", {}).get("name", "Unknown Status"),
+                    "plan_cost": properties.get("Plan cost $", {}).get("formula", {}).get("number", 0.0),
+                    "fact_cost": properties.get("Fact cost $", {}).get("formula", {}).get("number", 0.0),
+                    "business_unit": properties.get("Business Unit", {}).get("rollup", {}).get("array", [{}])[0].get("rich_text", [{}])[0].get("text", {}).get("content", "Unknown Business Unit") if properties.get("Business Unit", {}).get("rollup", {}).get("array") else "Unknown Business Unit",
+                    "project": properties.get("Projects", {}).get("relation", [{}])[0].get("id", "Unknown Project ID") if properties.get("Projects", {}).get("relation") else "Unknown Project ID"
+                }
+
+                notion_task_ids.add(task_id)
+                record_hash = self.calculate_record_hash(task_data)
+
+                if task_id in local_tasks_map:
+                    existing_task = local_tasks_map[task_id]
+                    if existing_task.record_hash != record_hash:
+                        # Оновлюємо існуючий запис
+                        for key, value in task_data.items():
+                            setattr(existing_task, key, value)
+                        existing_task.record_hash = record_hash
+                        updated_tasks.append(existing_task)
+                else:
+                    # Додаємо новий запис
+                    task_data["record_hash"] = record_hash
+                    new_tasks.append(Task(**task_data))
+
+            except Exception as e:
+                logger.error(f"❌ Error processing task {task_id}: {e}")
+
+        # Видаляємо записи, яких немає в Notion
+        local_task_ids = set(local_tasks_map.keys())
+        deleted_ids = local_task_ids - notion_task_ids
+        if deleted_ids:
+            Task.objects.filter(task_id__in=deleted_ids).delete()
+            logger.info(f"🗑 Deleted {len(deleted_ids)} outdated records.")
+
+        # Масове оновлення та створення
+        if new_tasks:
+            Task.objects.bulk_create(new_tasks)
+            logger.info(f"✅ Created {len(new_tasks)} new tasks.")
+
+        if updated_tasks:
+            Task.objects.bulk_update(updated_tasks, ["name", "hours_plan", "hours_fact", "start", "finish",
+                                                     "person", "status", "plan_cost", "fact_cost",
+                                                     "business_unit", "project", "record_hash"])
+            logger.info(f"✅ Updated {len(updated_tasks)} tasks.")
+                    
+
+           
+
 # Записуємо проекти з новшина в базу даних
-# синхронізуємо ордери
 class NotionProjects:
     def __init__(self, notion_token, database_id):
         self.notion = Client(auth=notion_token)
@@ -656,16 +769,39 @@ class NotionConnector:
 
         for attempt in range(1, retries + 1):
             try:
-                # Отримуємо всі записи з бази Notion
-                response = self.notion.databases.query(database_id=self.database_id)
-                notion_records = response.get("results", [])
-                total_records = len(notion_records)
-                notion_ids = set(record["id"] for record in notion_records)
                 
-              
+                all_notion_records = []
+                start_cursor = None
 
-                logger.info(f"Fetched {total_records} records from Notion.")
+                while True:
+                    # Формуємо параметри запиту
+                    query_params = {
+                        "database_id": self.database_id,
+                        "page_size": 100  # Обмежуємо кількість записів на запит
+                    }
+                    if start_cursor:
+                        query_params["start_cursor"] = start_cursor  # Додаємо курсор, якщо він є
+
+                    # Запит до Notion API
+                    response = self.notion.databases.query(**query_params)
+                    notion_records = response.get("results", [])
+                    all_notion_records.extend(notion_records)
+                   
+
+                    # Перевіряємо, чи є наступна сторінка
+                    start_cursor = response.get("next_cursor")
+                    if not start_cursor:
+                        break  # Виходимо з циклу, якщо даних більше немає
+
+                total_records = len(all_notion_records)
+                notion_ids = {record["id"] for record in all_notion_records}
+
+                logger.info(f"📊 Fetched {total_records} records from Notion.")
                 print(f"📊 Fetched {total_records} records.")
+
+                notion_records_dict = {record["id"]: record for record in all_notion_records}
+
+           
 
                 # Отримуємо всі локальні записи
                 local_records = NotionOrders.objects.all()
@@ -679,7 +815,7 @@ class NotionConnector:
                     logger.info(f"Deleted {len(deleted_ids)} records removed from Notion.")
 
                 # Оновлення та створення записів
-                for record in notion_records:
+                for order_id, record in notion_records_dict.items():
                     try:
                         properties = record.get("properties", {})
                         order_id = record.get("id", "Unknown Order ID")
@@ -695,6 +831,13 @@ class NotionConnector:
                             .get("text", {})
                             .get("content", "Unknown Service")
                         )
+
+                        id = (
+                            properties.get("ID", {})
+                            .get("unique_id", {})
+                            .get("number", "Unknown ID")
+                        )
+
                         service_id = (
                             properties.get("ID serv", {})
                             .get("rollup", {})
@@ -708,6 +851,13 @@ class NotionConnector:
                             .get("formula", {})
                             .get("number", 0.0)
                         )
+
+                        order_date = (
+                            properties.get("Order date", {})
+                            .get("date", {})
+                            .get("start", "Unknown Order Date")
+                        )
+
                         finish_date = (
                             properties.get("Finish Date", {})
                             .get("date", {})
@@ -719,7 +869,16 @@ class NotionConnector:
                             .get("name", "Unknown Responsible")
                         )
 
+                        category = (
+                            properties.get("Category", {})
+                            .get("rollup", {})
+                            .get("array", [{}])[0]
+                            .get("rich_text", [{}])[0]
+                            .get("text", {})
+                            .get("content", "Unknown Category") 
+                        )
 
+                        url_docs = properties.get("URL docs", {}).get("url", "Unknown URL")
 
                         business_unit = (
                             properties.get("Business Unit", {})
@@ -738,6 +897,15 @@ class NotionConnector:
                             .get("text", {})
                             .get("content", "Не вказано")
                             )
+                        
+                        business_project_pf = (
+                            properties.get("Busines project PF", {})
+                            .get("rollup", {})
+                            .get("array", [{}])[0]
+                            .get("rich_text", [{}])[0]
+                            .get("text", {})
+                            .get("content", "Unknown Business Project PF")
+                        )
                         
 
                         description = ( properties.get("Essence or description", {})
@@ -787,6 +955,7 @@ class NotionConnector:
 
                         # Рахуємо хеш запису для перевірки змін
                         current_hash = self.calculate_record_hash(record)
+                        existing_record = NotionOrders.objects.filter(order_id=order_id).first()
 
                         # Перевіряємо, чи існує запис у локальній базі
                         existing_record = NotionOrders.objects.filter(order_id=order_id).first()
@@ -799,12 +968,18 @@ class NotionConnector:
                                 existing_record.finish_date != finish_date or
                                 existing_record.service_id != service_id or
                                 existing_record.description != description or
+                                existing_record.category != category or
+                                existing_record.url_docs != url_docs or
                                 existing_record.cost_allocation_type != cost_allocation_type or
+                                existing_record.responsible_pf != responsible or
                                 existing_record.cost_allocation != cost_allocation or
                                 existing_record.team != team or
                                 existing_record.business_projects != business_projects or
+                                existing_record.business_project_pf != business_project_pf or
+                                existing_record.order_date != order_date or
                                 existing_record.hours_unit != hours_unit or
                                 existing_record.status != status or
+                                existing_record.order_id_num != id or
                                 existing_record.business_unit_id != business_unit_id
                             ):
                                 existing_record.name = name
@@ -814,15 +989,21 @@ class NotionConnector:
                                 existing_record.finish_date = finish_date
                                 existing_record.responsible = responsible
                                 existing_record.business_unit = business_unit
+                                existing_record.responsible_pf = responsible
+                                existing_record.category = category
+                                existing_record.url_docs = url_docs
                                 existing_record.business_unit_id = business_unit_id
                                 existing_record.record_hash = current_hash
                                 existing_record.description = description 
                                 existing_record.cost_allocation_type = cost_allocation_type 
+                                existing_record.business_project_pf = business_project_pf
+                                existing_record.order_date = order_date 
                                 existing_record.business_projects = business_projects
                                 existing_record.cost_allocation = cost_allocation 
                                 existing_record.team = team 
                                 existing_record.hours_unit = hours_unit 
                                 existing_record.status = status 
+                                existing_record.order_id_num = id 
                                 existing_record.save()
                                 logger.info(f"✅ Updated record: {order_id}")
                             else:
@@ -834,21 +1015,26 @@ class NotionConnector:
                             NotionOrders.objects.create(
                                 order_id=order_id,
                                 name=name,
-                                
                                 description=description,
                                 team=team,
                                 cost_allocation_type=cost_allocation_type,
                                 cost_allocation=cost_allocation ,
                                 hours_unit=hours_unit,
                                 status=status,
+                                url_docs=url_docs,
+                                category=category,
                                 service_name=service_name,
                                 service_id=service_id,
                                 order_cost=order_cost,
                                 finish_date=finish_date,
+                                business_project_pf=business_project_pf,
+                                order_date=order_date,
                                 responsible=responsible,
+                                responsible_pf=responsible,
                                 business_unit=business_unit,
                                 business_projects=business_projects,
                                 business_unit_id=business_unit_id,
+                                order_id_num=id,
                                 record_hash=current_hash,
                             )
                             logger.info(f"✅ Created new record: {order_id}")
