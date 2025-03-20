@@ -1,0 +1,23 @@
+[33mc945e358[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtest[m[33m, [m[1;31morigin/test[m[33m)[m HEAD@{0}: reset: moving to HEAD
+[33mc945e358[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtest[m[33m, [m[1;31morigin/test[m[33m)[m HEAD@{1}: commit: new2
+[33m192015bc[m HEAD@{2}: commit: new1
+[33m30270c7a[m HEAD@{3}: filter-branch: rewrite
+[33m3d145fd8[m HEAD@{4}: commit: new2
+[33m2802e8b4[m HEAD@{5}: commit: new1
+[33m54de1d11[m HEAD@{6}: commit: new
+[33ma0923bc4[m HEAD@{7}: commit: apdate ai
+[33md569d727[m HEAD@{8}: commit: AI asistent 07
+[33med47b840[m HEAD@{9}: commit: ww
+[33m8f979bd2[m HEAD@{10}: commit: ai
+[33me95b63bc[m HEAD@{11}: commit: AI asist 0/5
+[33md20c7b87[m HEAD@{12}: commit: houers in person workload
+[33mf66b96fd[m HEAD@{13}: commit: apdate botum
+[33m0b5b7482[m HEAD@{14}: commit: BU report by month cheks
+[33ma05ca437[m HEAD@{15}: commit: Celery v1.0
+[33mcbf1b5d2[m HEAD@{16}: commit: Update analytiks 1.1
+[33m6f0e91b4[m HEAD@{17}: commit: Update Analytiks 1.0
+[33mcbccb3f0[m HEAD@{18}: commit: Analitiks all1
+[33m538fd3be[m HEAD@{19}: commit: notion orders analitiks
+[33mc4d36c85[m HEAD@{20}: checkout: moving from main to test
+[33mc4d36c85[m HEAD@{21}: commit: 1
+[33m361ef7d2[m HEAD@{22}: commit (initial): v3

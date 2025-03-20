@@ -1,0 +1,63 @@
+openapi: 3.1.0
+info:
+  title: Get Weather Data
+  description: Retrieves current weather data for a specific location
+  version: v1.0.0
+servers:
+  - url: https://api.open-meteo.com/v1/forecast
+paths:
+  /:
+    get:
+      description: Get weather data for a specific location based on latitude and longitude.
+      operationId: GetCurrentWeather
+      parameters:
+        - name: latitude
+          in: query
+          description: Latitude of the location to retrieve the weather for.
+          required: true
+          schema:
+            type: number
+        - name: longitude
+          in: query
+          description: Longitude of the location to retrieve the weather for.
+          required: true
+          schema:
+            type: number
+        - name: current
+          in: query
+          description: Specifies the current weather parameters to retrieve (e.g., temperature_2m, wind_speed_10m).
+          required: false
+          schema:
+            type: string
+        - name: hourly
+          in: query
+          description: >
+            Specifies the hourly weather parameters to retrieve (e.g., temperature_2m, relative_humidity_2m, wind_speed_10m).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response containing weather data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  temperature_2m:
+                    type: number
+                    description: Temperature at 2 meters above ground.
+                  wind_speed_10m:
+                    type: number
+                    description: Wind speed at 10 meters above ground.
+                  relative_humidity_2m:
+                    type: number
+                    description: Relative humidity at 2 meters above ground.
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: The time of the weather data.
+        "400":
+          description: Bad request, possibly due to missing or invalid parameters.
+components:
+  schemas: {}

@@ -18,7 +18,7 @@ def start_scheduler():
     scheduler.add_jobstore(DjangoJobStore(), "default")
     scheduler.add_job(
         start_sync_job,
-        trigger=IntervalTrigger(minutes=5),
+        trigger=IntervalTrigger(minutes=155),
         id="sync_job",
         replace_existing=True,
     )
