@@ -50,6 +50,7 @@ class Project(models.Model):
     plan_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Plan cost", null=True, blank=True)
     fact_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Fact cost", null=True, blank=True)
     project_manager = models.CharField(max_length=255, verbose_name="Project manager")
+    telegram_topik_id = models.PositiveIntegerField(verbose_name="ID Підгрупи телеграму", default=0)
     record_hash = models.CharField(max_length=64, null=True, blank=True)
 
     def __str__(self):
@@ -70,6 +71,7 @@ class Parent(models.Model):
     
 class Task(models.Model):
     name = models.CharField(max_length=255, verbose_name="Task Name")
+    task_url = models.URLField(verbose_name="URL for task",blank=True, null=True)
     task_id = models.CharField(max_length=150,null=True, blank=True)
     parent_task = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name="subtasks", verbose_name="Parent Task", null=True, blank=True)
     hours_plan = models.FloatField(verbose_name="Hours plan", null=True, blank=True)
@@ -77,7 +79,7 @@ class Task(models.Model):
     start = models.DateField(verbose_name="Start", null=True, blank=True)
     finish = models.DateField(verbose_name="Finish", null=True, blank=True)
     person = models.CharField(max_length=255, verbose_name="Person (Executor)", null=True, blank=True)
-    
+    person_tg = models.CharField(max_length=150, choices=[("External persons", "External persons"), ("Stamford", "dv_vadym"),("Pulse", "andrii_pulse_netpeak"),("Degtaria", "degtaria"),("Voice", "voice_netpeak"), ("Insomnia", "Julia_kandalintseva"), ("Mirage", "Petro_Pryimsk"), ("Unknown Person", "Unknown Person")], verbose_name="Person_tg", null=True, blank=True)
     status = models.CharField(max_length=50, choices=[("Backlog", "Backlog"), ("To Do", "To Do"),("Need fix", "Need fix"),("Review", "Review"),("In progress", "In progress"), ("Canceled", "Canceled"), ("Completed", "Completed")], verbose_name="Status", null=True, blank=True)
     plan_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Plan cost", null=True, blank=True)
     fact_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Fact cost", null=True, blank=True)
@@ -102,3 +104,11 @@ class AIgenTask(models.Model):
 
     def __str__(self):
         return self.name
+
+class TelegramUsers(models.Model):
+    name_tg = models.CharField(max_length=255, verbose_name="Name TG")
+    name_notion = models.CharField(verbose_name="Name Notion", max_length=150,null=True, blank=True)
+    
+
+    def __str__(self):
+        return self.name_notion

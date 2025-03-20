@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TrainingMaterial, ChatHistory
+from .models import TrainingMaterial, ChatHistory, Tok
 
 @admin.register(TrainingMaterial)
 class ConfigAdmin(admin.ModelAdmin):
@@ -8,3 +8,7 @@ class ConfigAdmin(admin.ModelAdmin):
 @admin.register(ChatHistory)
 class ConfigAdmin(admin.ModelAdmin):
     list_display = ["user_id", "timestamp"]
+
+@admin.register(Tok)
+class ConfigAdmin(admin.ModelAdmin):
+    list_display = ["name", "telegram_id"]

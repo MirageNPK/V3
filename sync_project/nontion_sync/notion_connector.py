@@ -53,7 +53,7 @@ class NotionTasks:
                 response = self.notion.databases.query(**query_params)
                 notion_records = response.get("results", [])
                 all_notion_records.extend(notion_records)
-
+                
                 start_cursor = response.get("next_cursor")
                 if not start_cursor:
                     break
@@ -95,11 +95,13 @@ class NotionTasks:
                     "start": properties.get("Start", {}).get("date", {}).get("start", None),
                     "finish": properties.get("Finish", {}).get("date", {}).get("start", None),
                     "person": properties.get("Person", {}).get("people", [{}])[0].get("name", "Unknown Person") if properties.get("Person", {}).get("people") else "Unknown Person",
+                    "person_tg": properties.get("Person", {}).get("people", [{}])[0].get("name", "Unknown Person") if properties.get("Person", {}).get("people") else "Unknown Person",
                     "status": properties.get("Status", {}).get("status", {}).get("name", "Unknown Status"),
                     "plan_cost": properties.get("Plan cost $", {}).get("formula", {}).get("number", 0.0),
                     "fact_cost": properties.get("Fact cost $", {}).get("formula", {}).get("number", 0.0),
                     "business_unit": properties.get("Business Unit", {}).get("rollup", {}).get("array", [{}])[0].get("rich_text", [{}])[0].get("text", {}).get("content", "Unknown Business Unit") if properties.get("Business Unit", {}).get("rollup", {}).get("array") else "Unknown Business Unit",
-                    "project": properties.get("Projects", {}).get("relation", [{}])[0].get("id", "Unknown Project ID") if properties.get("Projects", {}).get("relation") else "Unknown Project ID"
+                    "project": properties.get("Projects", {}).get("relation", [{}])[0].get("id", "Unknown Project ID") if properties.get("Projects", {}).get("relation") else "Unknown Project ID",
+                    "task_url": record.get("url", "No URL available")
                 }
 
                 notion_task_ids.add(task_id)
@@ -135,8 +137,8 @@ class NotionTasks:
 
         if updated_tasks:
             Task.objects.bulk_update(updated_tasks, ["name", "hours_plan", "hours_fact", "start", "finish",
-                                                     "person", "status", "plan_cost", "fact_cost",
-                                                     "business_unit", "project", "record_hash"])
+                                                     "person", "person_tg", "status", "plan_cost", "fact_cost",
+                                                     "business_unit", "project", "task_url", "record_hash"])
             logger.info(f"✅ Updated {len(updated_tasks)} tasks.")
                     
 
@@ -880,6 +882,9 @@ class NotionConnector:
 
                         url_docs = properties.get("URL docs", {}).get("url", "Unknown URL")
 
+                        dist_projects = properties.get("% dist. projects", {}).get("url") or ""
+                        print (dist_projects)
+
                         business_unit = (
                             properties.get("Business Unit", {})
                             .get("rollup", {})
@@ -972,7 +977,7 @@ class NotionConnector:
                                 existing_record.url_docs != url_docs or
                                 existing_record.cost_allocation_type != cost_allocation_type or
                                 existing_record.responsible_pf != responsible or
-                                existing_record.cost_allocation != cost_allocation or
+                                existing_record.cost_allocation != cost_allocation + " " + dist_projects or
                                 existing_record.team != team or
                                 existing_record.business_projects != business_projects or
                                 existing_record.business_project_pf != business_project_pf or
@@ -999,7 +1004,7 @@ class NotionConnector:
                                 existing_record.business_project_pf = business_project_pf
                                 existing_record.order_date = order_date 
                                 existing_record.business_projects = business_projects
-                                existing_record.cost_allocation = cost_allocation 
+                                existing_record.cost_allocation = cost_allocation + " " + dist_projects
                                 existing_record.team = team 
                                 existing_record.hours_unit = hours_unit 
                                 existing_record.status = status 
@@ -1018,7 +1023,7 @@ class NotionConnector:
                                 description=description,
                                 team=team,
                                 cost_allocation_type=cost_allocation_type,
-                                cost_allocation=cost_allocation ,
+                                cost_allocation=cost_allocation + " " + dist_projects,
                                 hours_unit=hours_unit,
                                 status=status,
                                 url_docs=url_docs,

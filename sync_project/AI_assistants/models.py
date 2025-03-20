@@ -44,3 +44,12 @@ class ChatHistory(models.Model):
 
     def __str__(self):
         return f"User {self.user_id}: {self.message[:50]}..."
+    
+class Tok(models.Model):
+    name = models.CharField(max_length=255)
+    telegram_id = models.CharField(max_length=255) 
+    gpt_id = models.CharField(max_length=255) 
+    
+
+    def __str__(self):
+        return f"Tel {self.telegram_id}: {self.name}"

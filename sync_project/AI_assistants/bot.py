@@ -1,9 +1,11 @@
+import json
 from multiprocessing import context
 import sys
 import os
 import logging
 import asyncio
 from urllib import response
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Document,ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 # Додаємо кореневу директорію проекту до Python path
@@ -12,8 +14,8 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sync_project.settings')
 import django
 
 django.setup()
-from AI_assistants.models import TrainingMaterial, ChatHistory
-from nontion_sync.models import Project, NotionOrders, AIgenTask, Parent
+from AI_assistants.models import TrainingMaterial, ChatHistory, Tok
+from nontion_sync.models import Project, NotionOrders, AIgenTask, Parent, Task
 from django.db import models
 from django.db.models import QuerySet
 from asgiref.sync import sync_to_async
@@ -34,34 +36,37 @@ import hashlib
 
 CHUNK_SIZE = 3000
 MAX_CHUNKS = 5
-BOT_TOKEN = settings.BOT_TOKEN
-OPENAI_API_KEY = settings.OPENAI_API_KEY
+name = "AI asist fot PM"
+tok_instance = Tok.objects.filter(name=name).first()
+BOT_TOKEN = tok_instance.telegram_id
+OPENAI_API_KEY = tok_instance.gpt_id
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 user_requests_channel_post_reply = {}
 BOT_USERNAME = "@MiragePandA_bot"  
 AI_CONSULT_MODE = set()
+
+
+
+bot_username = "@MiragePandA_bot"
+
+GROUP_ID = -1002407037240  # Замініть на ID вашої групи
+
 async def handle_mention(update: Update, context: CallbackContext):
-    """Обробляє повідомлення, якщо бот згадано в каналі."""
-    # Перевірка, чи це повідомлення з каналу
-    if update.message:
+    """Обробляє повідомлення, якщо бота згадали у групі."""
+    chat_id = update.message.chat.id
+    if chat_id == GROUP_ID:  # Перевіряємо, що повідомлення з потрібної групи
         text = update.message.text
         bot_username = (await context.bot.get_me()).username
 
-        if bot_username in text:
-            # Якщо згадано бота, отримуємо текст без згадки
+        if f"@{bot_username}" in text:
             user_question = text.replace(f"@{bot_username}", "").strip()
 
-            # Якщо питання порожнє (тільки згадка бота)
             if not user_question:
-                # Викликаємо команду /start в каналі (для каналу)
-                await send_menu_to_channel(update, context)
-                return  # Завершуємо обробку, щоб не відправляти ще одну відповідь
-
-            # Якщо є текст після згадки бота, обробляємо запит до GPT
-            response = await ask_gpt_analysis(user_question)
-            # Відправка відповіді в канал
-            await update.message.reply_text(response)
+                await update.message.reply_text("Привіт! Чим можу допомогти?")
+            else:
+                response = await ask_gpt_analysis(user_question)
+                await update.message.reply_text(response)
 
 async def send_menu_to_channel(update: Update, context: CallbackContext):
     """Відправляє меню в канал."""
@@ -102,24 +107,19 @@ async def start(update: Update, context: CallbackContext):
         await update.callback_query.message.edit_text("Що ви хочете зробити?", reply_markup=reply_markup)
 
 async def handle_mention(update: Update, context: CallbackContext):
-    """Обробляє повідомлення, якщо бот згадано."""
-    # Перевірка на тип оновлення: чи є повідомлення з текстом
-    if update.message:
+    """Обробляє повідомлення, якщо бота згадали у групі."""
+    chat_id = update.message.chat.id
+    if chat_id == GROUP_ID:  # Перевіряємо, що повідомлення з потрібної групи
         text = update.message.text
         bot_username = (await context.bot.get_me()).username
 
-        if bot_username in text:
-            # Якщо згадано бота, отримуємо текст без згадки
+        if f"@{bot_username}" in text:
             user_question = text.replace(f"@{bot_username}", "").strip()
 
-            # Якщо питання порожнє (тільки згадка бота)
             if not user_question:
-                # Викликаємо команду /start (для приватних чатів)
-                await start(update, context)
+                await update.message.reply_text("Привіт! Чим можу допомогти?")
             else:
-                # Запит до GPT
                 response = await ask_gpt_analysis(user_question)
-                # Відправка відповіді
                 await update.message.reply_text(response)
 
 
@@ -281,14 +281,13 @@ async def generate_orders_excel(orders, month, year):
             "Дата прийняття виконаної послуги": order.finish_date.strftime("%d-%m-%Y") if order.finish_date else "",
             "Відповідальний виконавець замовлення": order.get_responsible_pf_display(),
             "Кількість замовлених послуг / годин роботи над замовленням": order.hours_unit,
+            "Коментарі виконавця до замовлення": order.order_id_num,
             "Статус": "Завершене" if order.status == "Done" else order.status,
-            "ID послуги": order.service_id,
             "Назва послуги": order.service_name,
             "Категорія послуги": order.category,
             "Вартість замовлення": order.order_cost,
-            "Посилання на Docs": order.url_docs,
-            "ID  замовлення з Notion": order.order_id,
-            "ID  замовлення з Notion номер": order.order_id_num
+            "Посилання на Docs": order.url_docs
+            
         } for order in orders
     ])
     
@@ -381,30 +380,26 @@ async def handle_ai_consult(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
     user_text = update.message.text if update.message else update.channel_post.text
 
-    # Автоматично дозволяємо відповідати у приватних чатах
-    if update.effective_chat.type in ["private", "group", "supergroup"]:
-        AI_CONSULT_MODE.add(chat_id)
-
-    # Отримуємо останню історію повідомлень (обмеження в 10 останніх)
-    context_history = await get_recent_context(chat_id, limit=10)  # <-- Додали limit
-
-    # Перевіряємо довжину контексту, щоб не перевищувати ліміт
-    if len(context_history) > 5000:  # Орієнтовний ліміт (регулюється)
-        context_history = context_history[-4000:]  # Обрізаємо до останніх 4000 символів
-
-    # Формуємо запит із контекстом
-    full_prompt = f"{context_history}\nUser: {user_text}\nAI:"
-
-    # Якщо чат у режимі консультації — відповідаємо без перевірки згадки
-    if chat_id in AI_CONSULT_MODE:
-        response = await ask_gpt_analysis(full_prompt)
-        await save_chat_history(chat_id, user_text, response)
-        await update.effective_message.reply_text(response)
-        return
-
-    # Перевіряємо, чи згадано бота
+    # Отримуємо ім'я бота
     bot_username = (await context.bot.get_me()).username
-    if f"@{bot_username}" in user_text:
+    mentioned = f"@{bot_username}" in user_text if user_text else False
+
+    # У приватних чатах і в режимі консультації — відповідаємо завжди
+    if update.effective_chat.type == "private" or chat_id in AI_CONSULT_MODE:
+        AI_CONSULT_MODE.add(chat_id)
+        should_respond = True
+    else:
+        # У групах відповідаємо тільки якщо є згадка
+        should_respond = mentioned
+
+    if should_respond:
+        # Отримуємо останню історію повідомлень (обмеження в 10 останніх)
+        context_history = await get_recent_context(chat_id, limit=10)
+        if len(context_history) > 5000:
+            context_history = context_history[-4000:]
+
+        # Формуємо запит із контекстом
+        full_prompt = f"{context_history}\nUser: {user_text}\nAI:"
         response = await ask_gpt_analysis(full_prompt)
         await save_chat_history(chat_id, user_text, response)
         await update.effective_message.reply_text(response)
@@ -494,6 +489,25 @@ async def project_has_tz(project_id: int) -> bool:
     tz_list = await get_tz_for_project(project_id)
     return len(tz_list) > 0
 
+# Функція для отримання тасок за проектом
+@sync_to_async
+def get_tasks_for_project(project_id: int):
+    try:
+        project = Project.objects.get(id=project_id)  # Отримуємо проект за Django ID
+        project_id_str = project.project_id  # Отримуємо `project_id` з моделі
+        logging.info(f"Шукаємо таски для project_id: '{project_id_str}'")
+
+        tasks = list(Task.objects.filter(project=project_id_str))  # Фільтруємо по `project_id`
+
+        logging.info(f"Знайдено {len(tasks)} тасок для project_id '{project_id_str}'")
+        return tasks
+    except Project.DoesNotExist:
+        logging.error(f"Проект з id {project_id} не знайдено")
+        return []
+    except Exception as e:
+        logging.error(f"Error getting tasks for project {project_id}: {e}")
+        return []
+
 # Основний хендлер для SMART цілей
 async def smart_goals_handler(update: Update, context: CallbackContext):
     if update.callback_query:
@@ -502,15 +516,22 @@ async def smart_goals_handler(update: Update, context: CallbackContext):
 
         if callback_data.startswith('smart_goals_project_'):
             project_id = int(callback_data.split('_')[-1])
+            tz_exists = await project_has_tz(project_id)
+            tasks = await get_tasks_for_project(project_id)
+            print(f"Проект {project_id}: ТЗ існує - {tz_exists}, таски - {tasks}")
 
-            if await project_has_tz(project_id):
+            if tasks:
+                await context.bot.send_message(user_id, f"Знайдено {len(tasks)} завдань для проекту.")
+            else:
+                await context.bot.send_message(user_id, "Завдань для цього проекту немає.")
+            if tz_exists or tasks:
                 await update.callback_query.answer()
                 await handle_smart_goals_for_project(project_id, update, context)
             else:
                 await update.callback_query.answer()
                 await context.bot.send_message(
                     user_id, 
-                    "Цей проект не має технічного завдання (ТЗ), тому не можна створити SMART цілі."
+                    "Цей проект не має технічного завдання (ТЗ) або завдань, тому не можна створити SMART цілі."
                 )
     
     elif update.message:
@@ -526,6 +547,7 @@ async def smart_goals_handler(update: Update, context: CallbackContext):
             reply_markup=reply_markup
         )
 
+
 # Функція для обробки SMART цілей для вибраного проекту
 async def handle_smart_goals_for_project(project_id: int, update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
@@ -535,27 +557,38 @@ async def handle_smart_goals_for_project(project_id: int, update: Update, contex
         return
 
     tz_list = await get_tz_for_project(project_id)
-    if not tz_list:
+    tasks_list = await get_tasks_for_project(project_id)
+
+    if not tz_list and not tasks_list:
         await update.callback_query.message.reply_text(
-            "Для цього проєкту немає ТЗ. Завантажте ТЗ для продовження."
+            "Для цього проєкту немає ТЗ або тасок. Завантажте ТЗ або додайте таски для продовження."
         )
         return
 
     # Об'єднуємо текст з кількох ТЗ
     extracted_text = "\n\n".join([tz.content for tz in tz_list])
-    logging.info(f"Отриманий текст ТЗ: {extracted_text[:200]}")
+
+    # Додаємо таски до тексту
+    if tasks_list:
+        extracted_text += "\n\nЗавдання:\n"
+        extracted_text += "\n".join([
+            f"- {task.name} (Статус: {task.status}, Виконавець: {task.person}, Фініш: {task.finish})"
+            for task in tasks_list
+        ])
+
+    logging.info(f"Отримані дані (перші 200 символів): {extracted_text[:200]}")
 
     # Формулюємо SMART-цілі
     chunk_size = 3000  # Оптимальний розмір для GPT
-    max_chunks = 5  # Обмежимо до 5 частин, щоб уникнути зависання
+    max_chunks = 5  # Обмежимо до 5 частин
     chunks = [extracted_text[i:i+chunk_size] for i in range(0, min(len(extracted_text), chunk_size * max_chunks), chunk_size)]
     smart_goals_parts = []
-    await update.callback_query.message.reply_text(
-            "Зачекайте трішечки я аналізую інформацію для написання смарт цілей"
-        )
+
+    await update.callback_query.message.reply_text("Зачекайте, аналізую інформацію для написання SMART-цілей.")
+
     for i, chunk in enumerate(chunks):
         logging.info(f"Обробляємо частину {i+1}/{len(chunks)}...")
-        
+
         start_time = time.time()
         smart_goals = await generate_smart_goals(chunk)
         elapsed_time = time.time() - start_time
@@ -563,11 +596,11 @@ async def handle_smart_goals_for_project(project_id: int, update: Update, contex
         logging.info(f"Частина {i+1} оброблена за {elapsed_time:.2f} сек.")
         smart_goals_parts.append(smart_goals)
 
-        await asyncio.sleep(0.5)  # Додаємо паузу між запитами, щоб уникнути навантаження
+        await asyncio.sleep(0.5)  # Додаємо паузу між запитами
 
     final_smart_goals = "\n\n".join(smart_goals_parts)
     logging.info(f"Згенеровані SMART-цілі (перші 200 символів): {final_smart_goals[:200]}")
-    
+
     await save_chat_history(chat_id, extracted_text, final_smart_goals)
     await update.callback_query.message.reply_text(
         f"SMART цілі для проєкту '{project.name}':\n\n{final_smart_goals[:4000]}"  # Ліміт у Telegram
@@ -625,7 +658,7 @@ async def save_chat_history(user_id, user_message, ai_response):
 def get_chat_history(user_id, limit=10):
     return ChatHistory.objects.filter(user_id=user_id).order_by('-timestamp')[:limit]
 
-async def get_recent_context(user_id, limit=5):
+async def get_recent_context(user_id, limit=8):
      """Асинхронно отримує останні повідомлення користувача для контексту AI."""
      history = await sync_to_async(
         lambda: list(ChatHistory.objects.filter(user_id=user_id).order_by('-timestamp')[:limit])
@@ -654,7 +687,7 @@ async def task_handler(update: Update, context: CallbackContext):
                 await update.callback_query.answer()
                 await context.bot.send_message(
                     user_id, 
-                    "Цей проект не має технічного завдання (ТЗ), тому не можна створити SMART цілі."
+                    "Цей проект не має технічного завдання (ТЗ), тому не можна створити Tasks."
                 )
     
     elif update.message:
@@ -833,13 +866,15 @@ def main():
 )
     
 
-
+    mention_handler = MessageHandler(filters.Mention([bot_username]), handle_mention)
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(conv_handler)
     application.add_handler(conv_handler_btn)
     # application.add_handler(conv_handler_tasks)
     application.add_handler(CommandHandler("start", start))
     # application.add_handler(CallbackQueryHandler(button_handler, pattern="^(?!smart_goals_project_).*"))
+    
+    application.add_handler(mention_handler)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_consult))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(smart_goals_handler, pattern="^smart_goals_project_"))
