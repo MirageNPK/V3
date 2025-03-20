@@ -23,7 +23,7 @@ from PyPDF2 import PdfReader
 import openai
 from telegram.ext import CallbackContext
 from django.conf import settings
-
+from AI_assistants.models import Tok
 from django.db import transaction
 from typing import List, Dict, Tuple, Any
 import hashlib
@@ -31,8 +31,10 @@ from telegram import Bot
 import asyncio
 CHUNK_SIZE = 3000
 MAX_CHUNKS = 5
-BOT_TOKEN = settings.BOT_TOKEN
-OPENAI_API_KEY = settings.OPENAI_API_KEY
+name = "AI asist fot PM"
+tok_instance = Tok.objects.filter(name=name).first()
+BOT_TOKEN = tok_instance.telegram_id
+OPENAI_API_KEY = tok_instance.gpt_id
 TELEGRAM_CHANNEL_ID = "-1002407037240"
 
 
