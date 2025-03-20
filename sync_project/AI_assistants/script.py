@@ -1,8 +1,11 @@
 import requests
 import logging
 import json
+from AI_assistants.models import Tok
 
-BOT_TOKEN = "7743780042:AAH3ZF5meHMKJSv-Upn6EwAbkcLwh9e1CQE"
+name = "AI asist fot PM"
+tok_instance = Tok.objects.filter(name=name).first()
+BOT_TOKEN = tok_instance.telegram_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
