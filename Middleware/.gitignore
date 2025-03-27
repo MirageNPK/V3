@@ -5,3 +5,5 @@ git rm --cached sync_project/logs/notion_sync.log
 git commit -m "Ignore log files"
 
 .env
+prod_settings.py
+
