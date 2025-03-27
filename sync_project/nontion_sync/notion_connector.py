@@ -883,7 +883,7 @@ class NotionConnector:
                         url_docs = properties.get("URL docs", {}).get("url", "Unknown URL")
 
                         dist_projects = properties.get("% dist. projects", {}).get("url") or ""
-                        print (dist_projects)
+                       
 
                         business_unit = (
                             properties.get("Business Unit", {})
