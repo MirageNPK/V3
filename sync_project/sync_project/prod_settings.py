@@ -35,3 +35,4 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Директорія дл
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),  # Якщо у вас є власні статичні файли
 ]
+STATIC_URL = '/static/'
