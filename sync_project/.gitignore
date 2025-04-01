@@ -1,0 +1,37 @@
+# Ігноруємо середовище розробки
+.env
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Ігноруємо лог-файли
+logs/
+*.log
+
+# Ігноруємо секретні конфігураційні файли
+sync_project/sync_project/local_settings.py
+sync_project/sync_project/prod_settings.py
+
+# Ігноруємо віртуальне середовище
+venv/
+Middleware/
+env/
+*.venv/
+Pipfile.lock
+
+# Ігноруємо файли пакетів Python
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Ігноруємо файли Redis (якщо використовується)
+Redis/
+
+# Ігноруємо статичні та медіафайли (якщо згенеровані)
+staticfiles/
+media/
