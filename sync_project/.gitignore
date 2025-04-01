@@ -8,3 +8,5 @@ sync_project/sync_project/local_settings.py
 
 # Ігноруємо папку Middleware
 Middleware/
+Redis/
+
