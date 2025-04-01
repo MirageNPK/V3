@@ -1046,7 +1046,10 @@ class NotionConnector:
 
                         records_synced += 1
                     except Exception as record_error:
-                        logger.warning(f"❌ Failed to sync record: {record.get('id')}")
+                        logger.warning(f"❌ Failed to sync record: {properties.get("ID", {})
+                            .get("unique_id", {})
+                            .get("number")}")
+                        
                         logger.warning(record_error)
 
                 break  # Успішна синхронізація, вихід із циклу
@@ -1136,12 +1139,11 @@ class WorkloadCalculator:
             hours = properties.get("Plan Hours", {}).get("number")
             
             ddl_date = properties.get("Data DDL", {}).get("formula", {}).get("date", {}).get("start", None)
-            
             if hours is None or not ddl_date:
                 continue
 
             try:
-                month_key = datetime.strptime(finish_date, "%Y-%m-%d").strftime("%m.%y")
+                month_key = datetime.strptime(ddl_date, "%Y-%m-%d").strftime("%m.%y")
                 add_hours(person, month_key, hours)
             except ValueError as e:
                 logger.error(f"Error processing DDL date for {person}: {e}")

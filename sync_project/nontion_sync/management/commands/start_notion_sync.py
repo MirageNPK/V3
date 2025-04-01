@@ -17,7 +17,6 @@ class Command(BaseCommand):
             # sync_notion_bunit_report()
             # sync_notion_workload ()
             # sync_notion_projects()
-            # sync_notion_workloadtemporary()
             # send_task_reminders()
             self.stdout.write("✅ Sync completed successfully.")
         except Exception as e:

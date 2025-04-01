@@ -15,18 +15,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-7*b!offfgff)0t_xgmi)gt$9k4i@pfgfggggfsssdkxk+=my%*d^1)!z4w&ad$*nsbtj'
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '*']
+ALLOWED_HOSTS = ['127.0.0.1', 'smartassist.netpeak.net']
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'notion_db',
         'USER': 'db_admin',
-        'PASSWORD': 'Petro1207$',
+        'PASSWORD': 'Petro#gghk1207$',
         'HOST': 'localhost',
         'PORT': '5432',
     }
 }
 
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Директорія для collectstatic
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  # Якщо у вас є власні статичні файли
+]
