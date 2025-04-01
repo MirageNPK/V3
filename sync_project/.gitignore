@@ -1,0 +1,15 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+
+echo "logs/*.log" >> .gitignore
+git rm --cached sync_project/logs/notion_sync.log
+git commit -m "Ignore log files"
+# Ігноруємо логи
+sync_project/logs/
+
+# Ігноруємо конфігураційні файли
+sync_project/sync_project/prod_settings.py
+sync_project/sync_project/local_settings.py
+
+# Ігноруємо папку Middleware
+Middleware/
+
