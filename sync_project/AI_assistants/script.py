@@ -1,6 +1,18 @@
 import requests
 import logging
 import json
+import sys
+import os
+import django
+
+# Додаємо кореневу директорію проєкту до sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Встановлюємо змінну середовища для Django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sync_project.settings')
+
+# Запускаємо Django
+django.setup()
 from AI_assistants.models import Tok
 
 name = "AI asist fot PM"

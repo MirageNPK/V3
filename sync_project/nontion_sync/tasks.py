@@ -222,12 +222,21 @@ def sync_notion_workloadtemporary(*args, **kwargs):
 
 
 @app.task
-def execute_tasks():
+def execute_orders_tasks():
     # Виконання задач по черзі
     chain(
-        sync_notion_orders.s(),
+        sync_notion_projects.s(),
         sync_notion_service_report.s(),
         sync_notion_responsible_report.s(),
         sync_notion_bunit_report.s(),
+        
+    )()
+
+@app.task
+def execute_projects_tasks():
+    # Виконання задач по черзі
+    chain(
+        sync_notion_orders.s(),
+        sync_notion_tasks.s(),
         
     )()

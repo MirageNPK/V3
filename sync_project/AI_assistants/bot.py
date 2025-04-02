@@ -35,7 +35,7 @@ from typing import List, Dict, Tuple, Any
 import hashlib
 
 CHUNK_SIZE = 3000
-MAX_CHUNKS = 5
+MAX_CHUNKS = 10
 name = "AI asist fot PM"
 tok_instance = Tok.objects.filter(name=name).first()
 BOT_TOKEN = tok_instance.telegram_id
@@ -50,7 +50,7 @@ AI_CONSULT_MODE = set()
 
 bot_username = "@MiragePandA_bot"
 
-GROUP_ID = -1002407037240  # Замініть на ID вашої групи
+GROUP_ID = -1002407037240  #  ID групи
 
 async def handle_mention(update: Update, context: CallbackContext):
     """Обробляє повідомлення, якщо бота згадали у групі."""

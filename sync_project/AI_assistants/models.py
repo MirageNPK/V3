@@ -53,3 +53,13 @@ class Tok(models.Model):
 
     def __str__(self):
         return f"Tel {self.telegram_id}: {self.name}"
+    
+class ChanellAndTopik(models.Model):
+    topikandcanel_name = models.CharField(max_length=255)
+    channel_id = models.CharField(max_length=255) 
+    topik_id = models.CharField(max_length=255) 
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="Topik", verbose_name="Project", null=True, blank=True)
+    project_external_id = models.CharField(max_length=50, null=True, blank=True)  # перейменоване поле
+
+    def __str__(self):
+        return f"Tel {self.topik_id}: {self.topikandcanel_name}"

@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import logging
-from .tasks import execute_tasks, sync_notion_workloadtemporary,sync_notion_orders, sync_notion_service_report, sync_notion_responsible_report, sync_notion_bunit_report, sync_notion_workload
+from .tasks import sync_notion_workloadtemporary,sync_notion_orders, sync_notion_service_report, sync_notion_responsible_report, sync_notion_bunit_report, sync_notion_workload
 
 logger = logging.getLogger(__name__)
 API_KEY = "notionpinok123pinok"
@@ -15,7 +15,6 @@ def run_task(request):
     if request.method in ["POST", "GET"]:
         try:
             sync_notion_orders()
-            # sync_notion_workloadtemporary()
             sync_notion_service_report()
             sync_notion_responsible_report()
             sync_notion_bunit_report()

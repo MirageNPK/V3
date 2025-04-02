@@ -12,7 +12,7 @@ app = Celery('sync_project')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
 # Автоматичне виявлення тасок у всіх встановлених додатках
-app.autodiscover_tasks(['nontion_sync', 'sync_app'])
+app.autodiscover_tasks(['nontion_sync', 'sync_app', 'AI_assistants'])
 
 @app.task(bind=True)
 def debug_task(self):
