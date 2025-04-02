@@ -33,6 +33,10 @@ import re
 from django.db import transaction
 from typing import List, Dict, Tuple, Any
 import hashlib
+from telegram.error import RetryAfter
+from asyncio import sleep
+from telegram import Update
+from telegram.ext import CallbackContext
 
 CHUNK_SIZE = 3000
 MAX_CHUNKS = 10
@@ -45,28 +49,34 @@ logger = logging.getLogger(__name__)
 user_requests_channel_post_reply = {}
 BOT_USERNAME = "@MiragePandA_bot"  
 AI_CONSULT_MODE = set()
+MAX_TOKENS = 5000
 
-
+KEYWORDS = {
+    "projects": ["проект", "проєкт", "список проектів", "наші проекти", "наші проєкти", "які проекти"],
+    "tasks": ["таски","тасок", "робіт", "таска", "в тасках", "задачі", "завдання", "список завдань", "мої таски", "які таски", "список тасок"],
+    "general": []
+}
 
 bot_username = "@MiragePandA_bot"
 
-GROUP_ID = -1002407037240  #  ID групи
+# GROUP_ID = -1002407037240  #  ID групи
+GROUP_ID = -4781583646
 
-async def handle_mention(update: Update, context: CallbackContext):
-    """Обробляє повідомлення, якщо бота згадали у групі."""
-    chat_id = update.message.chat.id
-    if chat_id == GROUP_ID:  # Перевіряємо, що повідомлення з потрібної групи
-        text = update.message.text
-        bot_username = (await context.bot.get_me()).username
+# async def handle_mention(update: Update, context: CallbackContext):
+#     """Обробляє повідомлення, якщо бота згадали у групі."""
+#     chat_id = update.message.chat.id
+#     if chat_id == GROUP_ID:  # Перевіряємо, що повідомлення з потрібної групи
+#         text = update.message.text
+#         bot_username = (await context.bot.get_me()).username
 
-        if f"@{bot_username}" in text:
-            user_question = text.replace(f"@{bot_username}", "").strip()
+#         if f"@{bot_username}" in text:
+#             user_question = text.replace(f"@{bot_username}", "").strip()
 
-            if not user_question:
-                await update.message.reply_text("Привіт! Чим можу допомогти?")
-            else:
-                response = await ask_gpt_analysis(user_question)
-                await update.message.reply_text(response)
+#             if not user_question:
+#                 await update.message.reply_text("Привіт! Чим можу допомогти?")
+#             else:
+#                 response = await ask_gpt_analysis(user_question)
+#                 await update.message.reply_text(response)
 
 async def send_menu_to_channel(update: Update, context: CallbackContext):
     """Відправляє меню в канал."""
@@ -106,21 +116,21 @@ async def start(update: Update, context: CallbackContext):
     elif update.callback_query:
         await update.callback_query.message.edit_text("Що ви хочете зробити?", reply_markup=reply_markup)
 
-async def handle_mention(update: Update, context: CallbackContext):
-    """Обробляє повідомлення, якщо бота згадали у групі."""
-    chat_id = update.message.chat.id
-    if chat_id == GROUP_ID:  # Перевіряємо, що повідомлення з потрібної групи
-        text = update.message.text
-        bot_username = (await context.bot.get_me()).username
+# async def handle_mention(update: Update, context: CallbackContext):
+#     """Обробляє повідомлення, якщо бота згадали у групі."""
+#     chat_id = update.message.chat.id
+#     if chat_id == GROUP_ID:  # Перевіряємо, що повідомлення з потрібної групи
+#         text = update.message.text
+#         bot_username = (await context.bot.get_me()).username
 
-        if f"@{bot_username}" in text:
-            user_question = text.replace(f"@{bot_username}", "").strip()
+#         if f"@{bot_username}" in text:
+#             user_question = text.replace(f"@{bot_username}", "").strip()
 
-            if not user_question:
-                await update.message.reply_text("Привіт! Чим можу допомогти?")
-            else:
-                response = await ask_gpt_analysis(user_question)
-                await update.message.reply_text(response)
+#             if not user_question:
+#                 await update.message.reply_text("Привіт! Чим можу допомогти?")
+#             else:
+#                 response = await ask_gpt_analysis(user_question)
+#                 await update.message.reply_text(response)
 
 
 async def get_projects():
@@ -380,29 +390,214 @@ async def handle_ai_consult(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
     user_text = update.message.text if update.message else update.channel_post.text
 
-    # Отримуємо ім'я бота
     bot_username = (await context.bot.get_me()).username
     mentioned = f"@{bot_username}" in user_text if user_text else False
 
-    # У приватних чатах і в режимі консультації — відповідаємо завжди
-    if update.effective_chat.type == "private" or chat_id in AI_CONSULT_MODE:
-        AI_CONSULT_MODE.add(chat_id)
-        should_respond = True
-    else:
-        # У групах відповідаємо тільки якщо є згадка
-        should_respond = mentioned
+    should_respond = update.effective_chat.type == "private" or chat_id in AI_CONSULT_MODE or mentioned
 
     if should_respond:
-        # Отримуємо останню історію повідомлень (обмеження в 10 останніх)
-        context_history = await get_recent_context(chat_id, limit=10)
-        if len(context_history) > 5000:
-            context_history = context_history[-4000:]
+        intent = await detect_intent(user_text)
+        logger.info(f"Визначений намір запиту: {intent}")
 
-        # Формуємо запит із контекстом
-        full_prompt = f"{context_history}\nUser: {user_text}\nAI:"
-        response = await ask_gpt_analysis(full_prompt)
-        await save_chat_history(chat_id, user_text, response)
-        await update.effective_message.reply_text(response)
+        if intent in ["projects", "tasks"]:
+            db_response = await fetch_data_from_db(intent)
+            logger.info(f"Відповідь з бази: {len(db_response)} символів")
+            
+            if len(db_response) > 75000:
+                db_response = db_response[:75000]  # Обрізаємо до максимуму
+            
+            # Ділимо відповідь на 3 частини по 25000 символів
+            response_parts = [db_response[i:i + 25000] for i in range(0, len(db_response), 25000)]
+            
+            for i, part in enumerate(response_parts):
+                ai_prompt = f"Частина {i + 1}/{len(response_parts)}. Користувач запитав: {user_text}'. Ось дані з бази:{part}\nСформулюй конкретну відповідь згідно прохання."
+                response = await ask_gpt_analysis(ai_prompt)
+                await update.effective_message.reply_text(response)
+                await asyncio.sleep(1)  # Невелика пауза між частинами
+        
+        else:
+            context_history = await get_recent_context(chat_id, limit=4)
+            if len(context_history) > 5000:
+                context_history = context_history[-4000:]
+            ai_prompt = f"{context_history}\nUser: {user_text}\nAI:"
+
+            logger.info(f"Довжина запиту до GPT: {len(ai_prompt)} символів")
+            response = await ask_gpt_analysis(ai_prompt)
+            await save_chat_history(chat_id, user_text, response)
+
+            try:
+                await update.effective_message.reply_text(response)
+            except RetryAfter as e:
+                logger.warning(f"Flood control exceeded. Чекаємо {e.retry_after} секунд...")
+                await asyncio.sleep(e.retry_after)
+                await update.effective_message.reply_text(response)
+
+
+async def detect_intent(user_text: str):
+    """Визначає, чи запит містить ключові слова для запиту до БД."""
+    for intent, words in KEYWORDS.items():
+        if any(word in user_text.lower() for word in words):
+            logger.info(f"Визначений намір: {intent} (запит: {user_text})")
+            return intent
+    logger.info(f"Не вдалося визначити намір (запит: {user_text})")
+    return "general"
+
+@sync_to_async
+def fetch_data_from_db(intent):
+    """Отримує дані з БД залежно від запиту."""
+    if intent == "projects":  
+        projects = Project.objects.values_list(
+            'name', 'direction', 'status', 'start', 'progress', 'finish_fact', 
+            'plan_cost', 'fact_cost', 'project_manager'
+        )
+        if projects:
+            project_list = "\n".join([ 
+                f"{p[0]} - {p[1]} - {p[2]} - {p[3]} - {p[4]} - {p[5]} - {p[6]} - {p[7]} - {p[8]}" 
+                for p in projects
+            ])
+            logger.info(f"Знайдені проєкти: {len(projects)} записів")
+            return f"📋 Список ваших проєктів:\n{project_list}"
+        else:
+            return "У базі немає жодного проєкту."
+
+    elif intent == "tasks":  
+        tasks = Task.objects.values_list(
+            'name', 'hours_plan', 'start', 'finish', 'person', 
+            'status', 'project', 'plan_cost'
+        )
+        if tasks:
+            tasks_list = "\n".join([ 
+                f"{t[0]} - {t[1]} - {t[2]} - {t[3]} - {t[4]} - {t[5]} - {t[6]} - {t[7]}" 
+                for t in tasks
+            ])
+            logger.info(f"Знайдені таски: {len(tasks)} записів")
+            return f"📋 Список ваших тасків:\n{tasks_list}"
+        else:
+            return "У базі немає жодної таски."
+
+    return "Я не знаю, як обробити цей запит."
+
+async def ask_gpt_analysis_streaming(update: Update, context: CallbackContext, question):
+    """Запит до GPT-3.5 у потоковому режимі."""
+    openai.api_key = OPENAI_API_KEY
+
+    # Ділимо текст на частини, якщо він надто великий
+    question_parts = split_text(question, MAX_TOKENS)
+
+    if len(question_parts) == 1:
+        await send_gpt_response(update, question_parts[0])
+        return
+    
+    responses = []
+    for i, part in enumerate(question_parts):
+        await update.message.reply_text(f"🔄 Обробляю частину {i+1}/{len(question_parts)}...")
+        response = await gpt_request_streaming(update, part)
+        responses.append(response)
+        await sleep(0.5)  # Мінімальна пауза для стабільності
+
+    # Об'єднуємо частини в більші блоки перед фінальним аналізом
+    merged_responses = merge_chunks(responses, MAX_TOKENS)
+
+    # Фінальний аналіз усіх частин разом
+    final_prompt = "🔍 Об'єднай ці частини в єдиний аналіз:\n" + "\n".join(merged_responses)
+    await send_gpt_response(update, final_prompt)
+
+async def gpt_request_streaming(update: Update, prompt):
+    """Відправка запиту до GPT у потоковому режимі та передача частин тексту користувачеві."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "Ти – досвідчений проєктний менеджер і фінансовий бізнес-аналітик..."},
+                      {"role": "user", "content": prompt}],
+            stream=True  # УВІМКНЕНО ПОТОКОВИЙ РЕЖИМ
+        )
+        
+        collected_response = ""
+        async for chunk in response:
+            if "choices" in chunk and len(chunk["choices"]) > 0:
+                text_chunk = chunk["choices"][0]["delta"].get("content", "")
+                if text_chunk:
+                    collected_response += text_chunk
+                    await update.message.reply_text(text_chunk)  # Відправляємо шматочок тексту в Telegram
+                    await sleep(0.2)  # Затримка для реалістичності
+
+        return collected_response.strip()
+    
+    except openai.error.InvalidRequestError as e:
+        await update.message.reply_text(f"⚠️ Помилка: {str(e)}")
+        return ""
+
+async def send_gpt_response(update: Update, prompt):
+    """Відправка відповіді GPT у Телеграм частинами."""
+    response = await gpt_request_streaming(update, prompt)
+    if response:
+        if len(response) > 4000:
+            for part in split_text(response, 4000):
+                await update.message.reply_text(part)
+        else:
+            await update.message.reply_text(response)
+
+def split_text(text, max_length):
+    """Розбиває текст на логічні частини, не більше max_length символів."""
+    sentences = text.split("\n")  # Логічно ділити по рядках, якщо текст структурований
+    parts, current_part = [], ""
+
+    for sentence in sentences:
+        if len(current_part) + len(sentence) + 1 > max_length:
+            parts.append(current_part)
+            current_part = sentence
+        else:
+            current_part += "\n" + sentence
+
+    if current_part:
+        parts.append(current_part)
+
+    return parts
+
+def merge_chunks(chunks, max_length):
+    """Об'єднує дрібні частини в більші, щоб зменшити кількість запитів."""
+    merged = []
+    current = ""
+
+    for chunk in chunks:
+        if len(current) + len(chunk) + 1 > max_length:
+            merged.append(current)
+            current = chunk
+        else:
+            current += "\n" + chunk
+
+    if current:
+        merged.append(current)
+
+    return merged
+# async def handle_ai_consult(update: Update, context: CallbackContext):
+#     """Обробляє повідомлення користувача для AI консультації."""
+#     chat_id = update.effective_chat.id
+#     user_text = update.message.text if update.message else update.channel_post.text
+
+#     # Отримуємо ім'я бота
+#     bot_username = (await context.bot.get_me()).username
+#     mentioned = f"@{bot_username}" in user_text if user_text else False
+
+#     # У приватних чатах і в режимі консультації — відповідаємо завжди
+#     if update.effective_chat.type == "private" or chat_id in AI_CONSULT_MODE:
+#         AI_CONSULT_MODE.add(chat_id)
+#         should_respond = True
+#     else:
+#         # У групах відповідаємо тільки якщо є згадка
+#         should_respond = mentioned
+
+#     if should_respond:
+#         # Отримуємо останню історію повідомлень (обмеження в 10 останніх)
+#         context_history = await get_recent_context(chat_id, limit=10)
+#         if len(context_history) > 5000:
+#             context_history = context_history[-4000:]
+
+#         # Формуємо запит із контекстом
+#         full_prompt = f"{context_history}\nUser: {user_text}\nAI:"
+#         response = await ask_gpt_analysis(full_prompt)
+#         await save_chat_history(chat_id, user_text, response)
+#         await update.effective_message.reply_text(response)
 
 def parse_document(file_path, file_name):
     if file_name.endswith(".docx"):
@@ -451,7 +646,41 @@ async def analyze_tz_with_ai(text):
 
     return "\n\n".join(results)
 
+# async def ask_gpt_analysis(question):
+#     """Запит до GPT-3.5 для аналізу великих обсягів тексту частинами."""
+#     openai.api_key = OPENAI_API_KEY
+    
+#     # Ділимо питання на частини
+#     question_parts = split_text(question, MAX_TOKENS)
+    
+#     if len(question_parts) == 1:
+#         return await gpt_request(question_parts[0])  # Якщо все вміщується — одразу відправляємо
 
+#     responses = []
+#     for i, part in enumerate(question_parts):
+#         print(f"Обробка частини {i+1}/{len(question_parts)}...")
+#         response = await gpt_request(part)
+#         responses.append(response)
+#         await sleep(0.5)  # Мінімальна пауза для стабільності
+
+#     # Об'єднуємо результати в більші блоки (по 3 відповіді в 1)
+#     merged_responses = merge_chunks(responses, MAX_TOKENS)
+    
+#     # Виконуємо фінальний аналіз
+#     final_prompt = "Об'єднай ці частини в єдиний аналіз:\n" + "\n".join(merged_responses)
+#     return await gpt_request(final_prompt)
+
+# async def ask_gpt_analysis(question):
+#     """Запит до GPT-3.5 для аналізу."""
+#     openai.api_key = OPENAI_API_KEY
+#     response = openai.ChatCompletion.create(
+#         model="gpt-3.5-turbo",
+#         messages=[
+#             {"role": "system", "content": "Ти – досвідчений проєктний менеджер і фінансовий бізнес-аналітик. Твоя основна мета – допомагати користувачам у плануванні, аналізі та управлінні проєктами..."},
+#             {"role": "user", "content": question}
+#         ]
+#     )
+#     return response["choices"][0]["message"]["content"].strip()
 async def ask_gpt_analysis(question):
     openai.api_key = OPENAI_API_KEY
     response = openai.ChatCompletion.create(
@@ -866,7 +1095,7 @@ def main():
 )
     
 
-    mention_handler = MessageHandler(filters.Mention([bot_username]), handle_mention)
+    # mention_handler = MessageHandler(filters.Mention([bot_username]), handle_mention)
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(conv_handler)
     application.add_handler(conv_handler_btn)
@@ -874,7 +1103,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     # application.add_handler(CallbackQueryHandler(button_handler, pattern="^(?!smart_goals_project_).*"))
     
-    application.add_handler(mention_handler)
+    # application.add_handler(mention_handler)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_consult))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(smart_goals_handler, pattern="^smart_goals_project_"))
@@ -889,7 +1118,7 @@ def main():
     ))
     application.add_handler(CallbackQueryHandler(enable_ai_consult, pattern="^consult_ai$"))
     # Обробник тільки згадок бота
-    application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"{BOT_USERNAME}"), handle_mention))
+    # application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"{BOT_USERNAME}"), handle_mention))
     # Обробник постів у каналі
     application.add_handler(MessageHandler(filters.ChatType.CHANNEL, send_menu_to_channel))
     application.run_polling()
