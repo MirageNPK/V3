@@ -59,7 +59,22 @@ class ChanellAndTopik(models.Model):
     channel_id = models.CharField(max_length=255) 
     topik_id = models.CharField(max_length=255) 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="Topik", verbose_name="Project", null=True, blank=True)
-    project_external_id = models.CharField(max_length=50, null=True, blank=True)  # перейменоване поле
+    project_external_id = models.CharField(max_length=50, null=True, blank=True)
+
+    class Meta:
+        db_table = 'AI_assistants_chanellandtopik'  # вказати ім'я таблиці
 
     def __str__(self):
         return f"Tel {self.topik_id}: {self.topikandcanel_name}"
+    
+class Feedback(models.Model):
+    user_id = models.BigIntegerField()
+    original_question = models.TextField()
+    original_response = models.TextField()
+    corrected_response = models.TextField(null=True, blank=True)
+    feedback = models.CharField(max_length=10, choices=[('👍', 'Good'), ('👎', 'Bad')])
+
+    class Meta:
+        db_table = 'AI_assistants_feedback'  # вказати ім'я таблиці
+
+    

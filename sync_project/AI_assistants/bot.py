@@ -14,7 +14,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sync_project.settings')
 import django
 
 django.setup()
-from AI_assistants.models import TrainingMaterial, ChatHistory, Tok
+from AI_assistants.models import TrainingMaterial, ChatHistory, Tok, Feedback
 from nontion_sync.models import Project, NotionOrders, AIgenTask, Parent, Task
 from django.db import models
 from django.db.models import QuerySet
@@ -52,7 +52,7 @@ AI_CONSULT_MODE = set()
 MAX_TOKENS = 5000
 
 KEYWORDS = {
-    "projects": ["проект", "проєкт", "список проектів", "наші проекти", "наші проєкти", "які проекти"],
+    "projects": ["проект", "проєкт", "проктах", "список проектів", "наші проекти", "наші проєкти", "які проекти"],
     "tasks": ["таски","тасок", "робіт", "таска", "в тасках", "задачі", "завдання", "список завдань", "мої таски", "які таски", "список тасок"],
     "general": []
 }
@@ -386,7 +386,7 @@ async def enable_ai_consult(update: Update, context: CallbackContext):
     )
 
 async def handle_ai_consult(update: Update, context: CallbackContext):
-    """Обробляє повідомлення користувача для AI консультації."""
+    """Обробка повідомлень користувача для AI-консультацій."""
     chat_id = update.effective_chat.id
     user_text = update.message.text if update.message else update.channel_post.text
 
@@ -401,36 +401,140 @@ async def handle_ai_consult(update: Update, context: CallbackContext):
 
         if intent in ["projects", "tasks"]:
             db_response = await fetch_data_from_db(intent)
+
             logger.info(f"Відповідь з бази: {len(db_response)} символів")
             
-            if len(db_response) > 75000:
-                db_response = db_response[:75000]  # Обрізаємо до максимуму
-            
-            # Ділимо відповідь на 3 частини по 25000 символів
+            if len(db_response) > 25000:
+                db_response = db_response[:400000]  
+
             response_parts = [db_response[i:i + 25000] for i in range(0, len(db_response), 25000)]
-            
+
             for i, part in enumerate(response_parts):
-                ai_prompt = f"Частина {i + 1}/{len(response_parts)}. Користувач запитав: {user_text}'. Ось дані з бази:{part}\nСформулюй конкретну відповідь згідно прохання."
+                ai_prompt = f"{user_text}\n Ось дані для відповіді користувачу:{part}\n Використовуй емодзі та трохи гумору."
                 response = await ask_gpt_analysis(ai_prompt)
-                await update.effective_message.reply_text(response)
-                await asyncio.sleep(1)  # Невелика пауза між частинами
+
+                # Надсилаємо відповідь + запит на відгук
+                message = await update.effective_message.reply_text(response)
+                await send_feedback_request(update, context, user_text, response)
+
+                await asyncio.sleep(1)
         
         else:
-            context_history = await get_recent_context(chat_id, limit=4)
-            if len(context_history) > 5000:
-                context_history = context_history[-4000:]
+            context_history = await get_recent_context(chat_id, limit=5)
+            if len(context_history) > 10000:
+                context_history = context_history[-5000:]
             ai_prompt = f"{context_history}\nUser: {user_text}\nAI:"
 
             logger.info(f"Довжина запиту до GPT: {len(ai_prompt)} символів")
-            response = await ask_gpt_analysis(ai_prompt)
+            response = await ask_gpt_consultant(ai_prompt)
             await save_chat_history(chat_id, user_text, response)
 
-            try:
-                await update.effective_message.reply_text(response)
-            except RetryAfter as e:
-                logger.warning(f"Flood control exceeded. Чекаємо {e.retry_after} секунд...")
-                await asyncio.sleep(e.retry_after)
-                await update.effective_message.reply_text(response)
+            message = await update.effective_message.reply_text(response)
+            await send_feedback_request(update, context, user_text, response)
+
+async def send_feedback_request(update: Update, context: CallbackContext, question: str, response: str):
+    """Надсилає кнопки з відгуком користувачу."""
+    # Скорочуємо питання та відповідь до 50 символів, якщо вони занадто довгі
+    shortened_question = question[:50] if question else "Без питання"
+    shortened_response = response[:50] if response else "Без відповіді"
+    
+    # Формуємо callback_data з коротким текстом питання та відповіді
+    callback_data_good = f"feedback_good|{shortened_question}|{shortened_response}"
+    callback_data_bad = f"feedback_bad|{shortened_question}|{shortened_response}"
+
+    # Перевірка довжини callback_data для безпеки (не повинно перевищувати 64 байти)
+    if len(callback_data_good.encode('utf-8')) > 64 or len(callback_data_bad.encode('utf-8')) > 64:
+        # Якщо довжина перевищує ліміт, скорочуємо ще більше або заміняємо на унікальний ідентифікатор
+        callback_data_good = f"feedback_good|{id(question)}|{id(response)}"
+        callback_data_bad = f"feedback_bad|{id(question)}|{id(response)}"
+    
+    # Створюємо клавіатуру з кнопками
+    keyboard = [
+        [InlineKeyboardButton("👍 Добре", callback_data=callback_data_good)],
+        [InlineKeyboardButton("👎 Погано", callback_data=callback_data_bad)]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.effective_message.reply_text("Як тобі відповідь?", reply_markup=reply_markup)
+from django.db import IntegrityError
+async def handle_feedback(update: Update, context: CallbackContext):
+    """Обробка відгуку користувача."""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data.split("|")
+    logger.info(f"Отримані дані від користувача: {data}")  # Додати логування для перевірки
+
+    # Перевірка на наявність коректних даних
+    if len(data) != 3:
+        await query.edit_message_text("Помилка: некоректні дані для відгуку.")
+        return
+    
+    feedback_type = data[0]
+    question = data[1]
+    response = data[2]
+
+    try:
+        if feedback_type == "feedback_good":
+            # Збереження позитивного відгуку
+            await sync_to_async(Feedback.objects.create)(
+                user_id=query.from_user.id,
+                original_question=question,
+                original_response=response,
+                feedback="👍"
+            )
+            await query.edit_message_text("Дякую за відгук! 😊")
+
+        elif feedback_type == "feedback_bad":
+            # Збереження негативного відгуку
+            await sync_to_async(Feedback.objects.create)(
+                user_id=query.from_user.id,
+                original_question=question,
+                original_response=response,
+                feedback="👎"
+            )
+            await query.edit_message_text("Окей, спробую покращити відповідь. Напиши правильний варіант:")
+            ai_prompt = f"Користувач не задоволений вашою відповіддю на запит: {question}\n Ось як можна поліпшити відповідь: {response}. Проаналізуйте це для покращення в майбутньому."
+            await ask_gpt_analysis(ai_prompt)
+
+        else:
+            # Якщо тип відгуку не відповідає очікуваному
+            await query.edit_message_text("Сталася помилка з типом відгуку. Спробуйте ще раз.")
+    
+    except IntegrityError as e:
+        # Логування помилки з базою даних
+        logger.error(f"Помилка при збереженні в базу даних: {e}")
+        await query.edit_message_text(f"Помилка збереження в базі даних: {e}")
+
+    except Exception as e:
+        # Загальна обробка помилок
+        logger.error(f"Невідома помилка: {e}")
+        await query.edit_message_text(f"Сталася непередбачена помилка: {e}")
+
+async def save_corrected_response(update: Update, context: CallbackContext):
+    """Збереження виправленої відповіді від користувача."""
+    user_id = update.effective_user.id
+    corrected_text = update.message.text
+
+    try:
+        # Отримуємо останній негативний відгук для цього користувача
+        feedback_entry = await sync_to_async(Feedback.objects.filter)(
+            user_id=user_id, feedback="👎"
+        ).order_by("-id").first()
+
+        if feedback_entry:
+            # Оновлюємо виправлену відповідь
+            feedback_entry.corrected_response = corrected_text
+            await sync_to_async(feedback_entry.save)()
+            await update.message.reply_text("Дякую! Я використаю цю інформацію для покращення відповідей у майбутньому.")
+        else:
+            # Якщо не знайдено відгук
+            await update.message.reply_text("Не знайдено негативного відгуку для збереження.")
+    
+    except Exception as e:
+        # Логування помилки
+        logger.error(f"Помилка при збереженні виправленої відповіді: {e}")
+        await update.message.reply_text(f"Сталася помилка при збереженні: {e}")
 
 
 async def detect_intent(user_text: str):
@@ -447,12 +551,12 @@ def fetch_data_from_db(intent):
     """Отримує дані з БД залежно від запиту."""
     if intent == "projects":  
         projects = Project.objects.values_list(
-            'name', 'direction', 'status', 'start', 'progress', 'finish_fact', 
-            'plan_cost', 'fact_cost', 'project_manager'
+            'name', 'direction', 'status', 'start', 'finish_fact', 
+            'plan_cost', 'fact_cost', 'project_manager', 'progress'
         )
         if projects:
             project_list = "\n".join([ 
-                f"{p[0]} - {p[1]} - {p[2]} - {p[3]} - {p[4]} - {p[5]} - {p[6]} - {p[7]} - {p[8]}" 
+                f"Проект - ( назва {p[0]},  напрямок {p[1]},  статус {p[2]}, дата старту {p[3]}, дата фінішу {p[4]}, бюджет план {p[5]} - бюджет факт {p[6]}, проектний менеджер {p[7]}, % виконання {p[8]});" 
                 for p in projects
             ])
             logger.info(f"Знайдені проєкти: {len(projects)} записів")
@@ -463,11 +567,11 @@ def fetch_data_from_db(intent):
     elif intent == "tasks":  
         tasks = Task.objects.values_list(
             'name', 'hours_plan', 'start', 'finish', 'person', 
-            'status', 'project', 'plan_cost'
+            'status', 'project'
         )
         if tasks:
             tasks_list = "\n".join([ 
-                f"{t[0]} - {t[1]} - {t[2]} - {t[3]} - {t[4]} - {t[5]} - {t[6]} - {t[7]}" 
+                f"Завдання для проекту ""{t[6]}""- (Назва {t[0]}, Планові люд/год. {t[1]}, Дата старту {t[2]}, Дедлайн {t[3]}, Виконавець {t[4]}, Статус {t[5]});" 
                 for t in tasks
             ])
             logger.info(f"Знайдені таски: {len(tasks)} записів")
@@ -477,99 +581,99 @@ def fetch_data_from_db(intent):
 
     return "Я не знаю, як обробити цей запит."
 
-async def ask_gpt_analysis_streaming(update: Update, context: CallbackContext, question):
-    """Запит до GPT-3.5 у потоковому режимі."""
-    openai.api_key = OPENAI_API_KEY
+# async def ask_gpt_analysis_streaming(update: Update, context: CallbackContext, question):
+#     """Запит до GPT-3.5 у потоковому режимі."""
+#     openai.api_key = OPENAI_API_KEY
 
-    # Ділимо текст на частини, якщо він надто великий
-    question_parts = split_text(question, MAX_TOKENS)
+#     # Ділимо текст на частини, якщо він надто великий
+#     question_parts = split_text(question, MAX_TOKENS)
 
-    if len(question_parts) == 1:
-        await send_gpt_response(update, question_parts[0])
-        return
+#     if len(question_parts) == 1:
+#         await send_gpt_response(update, question_parts[0])
+#         return
     
-    responses = []
-    for i, part in enumerate(question_parts):
-        await update.message.reply_text(f"🔄 Обробляю частину {i+1}/{len(question_parts)}...")
-        response = await gpt_request_streaming(update, part)
-        responses.append(response)
-        await sleep(0.5)  # Мінімальна пауза для стабільності
+#     responses = []
+#     for i, part in enumerate(question_parts):
+#         await update.message.reply_text(f"🔄 Обробляю частину {i+1}/{len(question_parts)}...")
+#         response = await gpt_request_streaming(update, part)
+#         responses.append(response)
+#         await sleep(0.5)  # Мінімальна пауза для стабільності
 
-    # Об'єднуємо частини в більші блоки перед фінальним аналізом
-    merged_responses = merge_chunks(responses, MAX_TOKENS)
+#     # Об'єднуємо частини в більші блоки перед фінальним аналізом
+#     merged_responses = merge_chunks(responses, MAX_TOKENS)
 
-    # Фінальний аналіз усіх частин разом
-    final_prompt = "🔍 Об'єднай ці частини в єдиний аналіз:\n" + "\n".join(merged_responses)
-    await send_gpt_response(update, final_prompt)
+#     # Фінальний аналіз усіх частин разом
+#     final_prompt = "🔍 Об'єднай ці частини в єдиний аналіз:\n" + "\n".join(merged_responses)
+#     await send_gpt_response(update, final_prompt)
 
-async def gpt_request_streaming(update: Update, prompt):
-    """Відправка запиту до GPT у потоковому режимі та передача частин тексту користувачеві."""
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Ти – досвідчений проєктний менеджер і фінансовий бізнес-аналітик..."},
-                      {"role": "user", "content": prompt}],
-            stream=True  # УВІМКНЕНО ПОТОКОВИЙ РЕЖИМ
-        )
+# async def gpt_request_streaming(update: Update, prompt):
+#     """Відправка запиту до GPT у потоковому режимі та передача частин тексту користувачеві."""
+#     try:
+#         response = openai.ChatCompletion.create(
+#             model="gpt-3.5-turbo",
+#             messages=[{"role": "system", "content": "Ти – досвідчений проєктний менеджер і фінансовий бізнес-аналітик..."},
+#                       {"role": "user", "content": prompt}],
+#             stream=True  # УВІМКНЕНО ПОТОКОВИЙ РЕЖИМ
+#         )
         
-        collected_response = ""
-        async for chunk in response:
-            if "choices" in chunk and len(chunk["choices"]) > 0:
-                text_chunk = chunk["choices"][0]["delta"].get("content", "")
-                if text_chunk:
-                    collected_response += text_chunk
-                    await update.message.reply_text(text_chunk)  # Відправляємо шматочок тексту в Telegram
-                    await sleep(0.2)  # Затримка для реалістичності
+#         collected_response = ""
+#         async for chunk in response:
+#             if "choices" in chunk and len(chunk["choices"]) > 0:
+#                 text_chunk = chunk["choices"][0]["delta"].get("content", "")
+#                 if text_chunk:
+#                     collected_response += text_chunk
+#                     await update.message.reply_text(text_chunk)  # Відправляємо шматочок тексту в Telegram
+#                     await sleep(0.2)  # Затримка для реалістичності
 
-        return collected_response.strip()
+#         return collected_response.strip()
     
-    except openai.error.InvalidRequestError as e:
-        await update.message.reply_text(f"⚠️ Помилка: {str(e)}")
-        return ""
+#     except openai.error.InvalidRequestError as e:
+#         await update.message.reply_text(f"⚠️ Помилка: {str(e)}")
+#         return ""
 
-async def send_gpt_response(update: Update, prompt):
-    """Відправка відповіді GPT у Телеграм частинами."""
-    response = await gpt_request_streaming(update, prompt)
-    if response:
-        if len(response) > 4000:
-            for part in split_text(response, 4000):
-                await update.message.reply_text(part)
-        else:
-            await update.message.reply_text(response)
+# async def send_gpt_response(update: Update, prompt):
+#     """Відправка відповіді GPT у Телеграм частинами."""
+#     response = await gpt_request_streaming(update, prompt)
+#     if response:
+#         if len(response) > 4000:
+#             for part in split_text(response, 4000):
+#                 await update.message.reply_text(part)
+#         else:
+#             await update.message.reply_text(response)
 
-def split_text(text, max_length):
-    """Розбиває текст на логічні частини, не більше max_length символів."""
-    sentences = text.split("\n")  # Логічно ділити по рядках, якщо текст структурований
-    parts, current_part = [], ""
+# def split_text(text, max_length):
+#     """Розбиває текст на логічні частини, не більше max_length символів."""
+#     sentences = text.split("\n")  # Логічно ділити по рядках, якщо текст структурований
+#     parts, current_part = [], ""
 
-    for sentence in sentences:
-        if len(current_part) + len(sentence) + 1 > max_length:
-            parts.append(current_part)
-            current_part = sentence
-        else:
-            current_part += "\n" + sentence
+#     for sentence in sentences:
+#         if len(current_part) + len(sentence) + 1 > max_length:
+#             parts.append(current_part)
+#             current_part = sentence
+#         else:
+#             current_part += "\n" + sentence
 
-    if current_part:
-        parts.append(current_part)
+#     if current_part:
+#         parts.append(current_part)
 
-    return parts
+#     return parts
 
-def merge_chunks(chunks, max_length):
-    """Об'єднує дрібні частини в більші, щоб зменшити кількість запитів."""
-    merged = []
-    current = ""
+# def merge_chunks(chunks, max_length):
+#     """Об'єднує дрібні частини в більші, щоб зменшити кількість запитів."""
+#     merged = []
+#     current = ""
 
-    for chunk in chunks:
-        if len(current) + len(chunk) + 1 > max_length:
-            merged.append(current)
-            current = chunk
-        else:
-            current += "\n" + chunk
+#     for chunk in chunks:
+#         if len(current) + len(chunk) + 1 > max_length:
+#             merged.append(current)
+#             current = chunk
+#         else:
+#             current += "\n" + chunk
 
-    if current:
-        merged.append(current)
+#     if current:
+#         merged.append(current)
 
-    return merged
+#     return merged
 # async def handle_ai_consult(update: Update, context: CallbackContext):
 #     """Обробляє повідомлення користувача для AI консультації."""
 #     chat_id = update.effective_chat.id
@@ -686,9 +790,30 @@ async def ask_gpt_analysis(question):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system", "content": "Ти – досвідчений проєктний менеджер і фінансовий бізнес-аналітик. Твоя основна мета – допомагати користувачам у плануванні, аналізі та управлінні проєктами. Ти аналізуєш технічні завдання (ТЗ), формуєш SMART-цілі, пропонуєш оптимальні підходи до управління ресурсами, оцінюєш фінансові ризики та ефективність рішень.Коли користувач ставить запитання, надай чітку, структуровану та практичну відповідь. Використовуй методики управління проєктами (PMBOK, Agile, Scrum, Kanban) та фінансовий аналіз (ROI, NPV, фінансове моделювання). Якщо аналізуєш ТЗ, звертай увагу на:✅ Логіку, узгодженість і чіткість вимог, ✅ Відповідність SMART-цілям, ✅ Фінансову доцільність та ризики реалізації. Відповідай стисло, без зайвої води, орієнтуючись на практичні рекомендації. Якщо потрібен розширений аналіз – запитуй додаткову інформацію.."},
+            {"role": "system", "content": "Ти – досвідчений проєктний менеджер і фінансовий бізнес-аналітик. Твоя основна мета – допомагати користувачам та добре розраховувати математичні завдання"},
             {"role": "user", "content": question}
-        ]
+        ],
+          # Контролює довжину відповіді
+        temperature=0.2
+    )
+    return response["choices"][0]["message"]["content"].strip()
+
+async def ask_gpt_consultant(question):
+    openai.api_key = OPENAI_API_KEY
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages = [
+        {
+            "role": "system", 
+            "content": "Ти – досвідчений проєктний менеджер, фінансовий аналітик та експерт із розрахунків. Ти допомагаєш у плануванні, аналізі проєктів, фінансах та управлінні ресурсами.\n\n🔹 Що ти робиш:\n- Аналізуєш ТЗ, перевіряєш логіку, SMART-цілі, фінансову доцільність.\n- Виконуєш точні розрахунки (ROI, NPV, IRR, маржинальність, окупність).\n- Формуєш фінансові прогнози, звіти, таблиці та графіки.\n- Використовуєш методики управління проєктами (PMBOK, Agile, Scrum).\n\n🔹 Як ти відповідаєш:\n✅ Чітко, структуровано, без зайвої води.\n✅ Використовуєш правильні формули, пояснюєш і застосовуєш на прикладах.\n✅ Якщо потрібно – уточнюєш вхідні дані.\n✅ Формуєш аналітичні звіти у зрозумілому вигляді.\n\n🔹 Приклад:\nНа запит 'Яка окупність проєкту?' – обираєш правильну формулу (Payback Period = Investment / Cash Flow), виконуєш розрахунок і пояснюєш результат.\nВідповіді користувачу формуй використовуючи емодзі для читабельності і у кожну відповідь добавляй трішечки гумору."
+        },
+        {
+            "role": "user", 
+            "content": question
+        }
+    ],
+    max_tokens=4090,  # Контролює довжину відповіді
+    temperature=0.7
     )
     return response["choices"][0]["message"]["content"].strip()
 
@@ -1094,9 +1219,10 @@ def main():
     fallbacks=[],
 )
     
-
+    feedback_handler = CallbackQueryHandler(handle_feedback, pattern="^feedback_*")
     # mention_handler = MessageHandler(filters.Mention([bot_username]), handle_mention)
     application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(feedback_handler)
     application.add_handler(conv_handler)
     application.add_handler(conv_handler_btn)
     # application.add_handler(conv_handler_tasks)
@@ -1104,11 +1230,14 @@ def main():
     # application.add_handler(CallbackQueryHandler(button_handler, pattern="^(?!smart_goals_project_).*"))
     
     # application.add_handler(mention_handler)
+    
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_consult))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(smart_goals_handler, pattern="^smart_goals_project_"))
     application.add_handler(CallbackQueryHandler(handle_smart_goals_for_project, pattern="^smart_goals_project_"))
     application.add_handler(CallbackQueryHandler(task_handler, pattern="^tasks_project_"))
+    
+
     
     
     
@@ -1125,3 +1254,53 @@ def main():
 
 if __name__ == "__main__":
     main()
+# def main():
+#     # Створення конвеєра для обробки розмов
+#     conv_handler = ConversationHandler(
+#         entry_points=[CallbackQueryHandler(create_new_project, pattern="^create_new_project$")],
+#         states={
+#             WAITING_PROJECT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_new_project_name)],
+#         },
+#         fallbacks=[],
+#     )
+    
+#     conv_handler_btn = ConversationHandler(
+#         entry_points=[CallbackQueryHandler(button_handler, pattern="^(?!smart_goals_project_).*")],
+#         states={
+#             WAITING_FOR_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_date_input)],
+#         },
+#         fallbacks=[],
+#     )
+#     # mention_handler = MessageHandler(filters.Mention([bot_username]), handle_mention)
+#     feedback_handler = CallbackQueryHandler(handle_feedback, pattern="^feedback_*")
+    
+#     application = Application.builder().token(BOT_TOKEN).build()
+    
+#     # Додаємо всі обробники
+#     application.add_handler(feedback_handler)
+#     application.add_handler(conv_handler)  # Додаємо ConversationHandler для нових проектів
+#     application.add_handler(conv_handler_btn)  # Додаємо ConversationHandler для кнопок
+#      # Додаємо CallbackQueryHandler для фідбеку
+    
+#     # Додаємо обробники для команд і кнопок
+#     application.add_handler(CommandHandler("start", start))
+#     application.add_handler(CallbackQueryHandler(smart_goals_handler, pattern="^smart_goals_project_"))
+#     application.add_handler(CallbackQueryHandler(handle_smart_goals_for_project, pattern="^smart_goals_project_"))
+#     application.add_handler(CallbackQueryHandler(task_handler, pattern="^tasks_project_"))
+    
+#     # Обробники для AI консультацій
+#     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ai_consult))
+#     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+#     application.add_handler(CallbackQueryHandler(enable_ai_consult, pattern="^consult_ai$"))
+    
+#     # Обробник для згадок бота
+#     # application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"{BOT_USERNAME}"), handle_mention))
+    
+#     # Обробник для постів у каналі
+#     application.add_handler(MessageHandler(filters.ChatType.CHANNEL, send_menu_to_channel))
+    
+#     # Запуск бота
+#     application.run_polling()
+
+# if __name__ == "__main__":
+#     main()

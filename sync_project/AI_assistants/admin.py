@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TrainingMaterial, ChatHistory, Tok, ChanellAndTopik
+from .models import TrainingMaterial, ChatHistory, Tok, ChanellAndTopik, Feedback
 
 @admin.register(TrainingMaterial)
 class ConfigAdmin(admin.ModelAdmin):
@@ -15,6 +15,10 @@ class ConfigAdmin(admin.ModelAdmin):
 
 
 @admin.register(ChanellAndTopik)
-class ConfigAdmin(admin.ModelAdmin):
-    list_display = ["topikandcanel_name", "channel_id", "topik_id", "project" ]
-  
+class ChanellAndTopikAdmin(admin.ModelAdmin):
+    list_display = ["topikandcanel_name", "channel_id", "topik_id", "project"]
+
+# Адмінка для Feedback
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ["original_response", "user_id", "corrected_response"]

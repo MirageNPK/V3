@@ -1046,9 +1046,7 @@ class NotionConnector:
 
                         records_synced += 1
                     except Exception as record_error:
-                        logger.warning(f"❌ Failed to sync record: {properties.get("ID", {})
-                            .get("unique_id", {})
-                            .get("number")}")
+                        logger.warning("❌ Failed to sync record: {}".format(properties.get("ID", {}).get("unique_id", {}).get("number")))
                         
                         logger.warning(record_error)
 
